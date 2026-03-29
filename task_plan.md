@@ -1,37 +1,32 @@
-# Task Plan: Frontend Refactor and Deployment Simplification
+# Task Plan: Frontend Refactor and Easy Deployment
 
 ## Goal
-Refactor the web frontend into a maintainable, modular, production-ready structure aligned with the existing Node/Express backend APIs, and provide easy, copy-paste deployment instructions.
+Refactor the frontend side of the project around a single clear web stack (the `web/` Vite + React + TypeScript app), align deployment/run docs to this stack, and fully implement an easy-to-deploy path.
 
 ## Sequence of Execution
 1. **[complete] Context Gathering**
-   - Inspect repository structure, frontend files, docs, and runtime stack.
-   - Confirm existing planning files and repurpose them for this task.
-2. **[complete] Brainstorming Understanding Lock**
-   - Clarify required target frontend stack and migration depth.
-   - Confirm page parity expectations and acceptable UX changes.
-3. **[complete] Design Selection**
-   - Propose 2-3 viable frontend architectures and select one.
-   - Capture assumptions, trade-offs, and decision log.
-4. **[complete] Implementation**
-   - Create frontend app structure, shared modules, and routing strategy.
-   - Migrate existing page functionality (join, register, items, groups, bids, admin, display).
-   - Preserve backend API contracts and realtime Socket.IO behavior.
-5. **[complete] Deployment Simplification**
-   - Add clear local/dev/prod instructions.
-   - Add build/start commands, environment setup, and static hosting notes.
-6. **[complete] Validation**
-   - Run lint/build/runtime checks for frontend and server.
-   - Verify docs match real commands and app behavior.
+   - Inspect current repo structure, frontend variants, scripts, and docs.
+   - Confirm planning files and repurpose for the current request.
+2. **[in_progress] Brainstorming Understanding Lock**
+   - Confirm which frontend should be canonical (`web/` React app vs static `public/*.html` pages).
+   - Confirm expected deployment target and minimal DX requirements.
+3. **[pending] Design Selection**
+   - Propose 2-3 viable frontend refactor approaches with trade-offs.
+   - Finalize chosen approach and document assumptions + decisions.
+4. **[pending] Implementation**
+   - Refactor frontend architecture in `web/` (routing, pages, shared API/socket client, state).
+   - Align backend static serving path to deploy the built frontend cleanly.
+   - Remove or de-prioritize duplicate frontend artifacts as decided.
+5. **[pending] Deployment Simplification**
+   - Provide one-command local run.
+   - Provide production deployment instructions (build + start) with environment variables.
+6. **[pending] Validation**
+   - Run frontend lint/build checks and backend startup checks.
+   - Verify docs match executable commands.
 
 ## Errors Encountered
-- TypeScript build errors after initial scaffold:
-  - type-only imports required under `verbatimModuleSyntax`
-  - `useEffect` cleanup returning `Socket` instead of `void`
-  - resolved by converting to type imports and explicit cleanup blocks.
+- None yet for this refactor cycle.
 
 ## Decision Log
-- Existing backend API endpoints and Socket.IO events remain source-of-truth contracts.
-- Refactor focuses on web frontend only for this request.
-- Implemented React SPA in `web/` with route parity for bidder/admin/display pages.
-- Backend now serves `web/dist` when present with SPA fallback; legacy `public/` remains fallback when dist is absent.
+- Initial observation: there are currently two frontend paradigms (`public/*.html` and `web/` React app), causing duplicated UI stack and unclear deployment defaults.
+- Pending user confirmation: which frontend should be canonical after refactor.

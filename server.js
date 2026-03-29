@@ -5,7 +5,6 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const mongoose = require('mongoose');
 
@@ -22,10 +21,7 @@ const io = socketIo(server, {
 // Middleware
 app.use(express.json());
 app.use(cors());
-const distPath = path.join(__dirname, 'web', 'dist');
-const legacyPublicPath = path.join(__dirname, 'public');
-const webRoot = fs.existsSync(distPath) ? distPath : legacyPublicPath;
-app.use(express.static(webRoot));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use((req, res, next) => {
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
     res.on('finish', () => {
@@ -1560,11 +1556,6 @@ app.post('/api/events/:eventId/groups/join-by-code', (req, res) => {
   }
 
   res.status(201).json(group);
-});
-
-// SPA fallback for React web app routes.
-app.get(/^(?!\/api|\/socket\.io).*/, (req, res) => {
-  res.sendFile(path.join(webRoot, 'index.html'));
 });
 
 // ============================================================================

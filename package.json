@@ -5,10 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "dev:web": "npm run dev --prefix web",
-    "build:web": "npm run build --prefix web",
-    "build": "npm run build:web"
+    "dev": "node server.js"
   },
   "keywords": ["auction", "bidding", "charity"],
   "author": "",

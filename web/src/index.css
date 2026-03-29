@@ -1,3 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap');
+
+:root {
+  --theme-bg: #fefcf7;
+  --theme-bgCard: #ffffff;
+  --theme-bgCardAlt: #f8f4ed;
+  --theme-primary: #1e3a8a;
+  --theme-primaryLight: #eff6ff;
+  --theme-accent: #b88a3e;
+  --theme-accentLight: #f5ecd8;
+  --theme-text: #1c2b22;
+  --theme-textMuted: #6b7f72;
+  --theme-border: rgba(30, 58, 138, 0.12);
+  --theme-borderAccent: rgba(184, 138, 62, 0.25);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--theme-bg);
+  color: var(--theme-text);
+  font-family: 'Nunito Sans', system-ui, sans-serif;
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: 'Lora', serif;
+}
+
 #root {
   min-height: 100vh;
+}
+
+input, textarea, select {
+  width: 100%;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: #fff;
+  color: var(--theme-text);
+}
+input:focus, textarea:focus, select:focus {
+  outline: 2px solid var(--theme-primaryLight);
+  border-color: var(--theme-primary);
 }

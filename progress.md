@@ -1,23 +1,35 @@
 # Session Progress
 
 ## Completed
-- Reviewed repository state and current web architecture.
-- Confirmed this request targets frontend/web refactor only.
-- Reoriented planning files (`task_plan.md`, `findings.md`, `progress.md`) to the frontend refactor objective.
-- Audited key frontend files: `public/index.html`, `public/admin.html`, `public/theme.css`, `public/theme.js`, `public/app-config.js`.
-- Identified major refactor hotspots: inline scripts, duplicated API/socket logic, inconsistent UI composition patterns.
-- Scaffolded new React + Vite + TypeScript frontend under `web/`.
-- Implemented route-based web app parity pages:
-  - `/`, `/register`, `/items`, `/item/:itemId`, `/groups`, `/group/:groupId`, `/mybids`, `/profile`, `/admin`, `/display`.
-- Added shared API-driven flows for bidding, groups, profile, and admin management.
-- Wired Vite dev proxy for `/api`, `/socket.io`, and `/img`.
-- Updated backend static hosting:
-  - serves `web/dist` when built
-  - falls back to legacy `public/` if dist is absent
-  - includes SPA route fallback for non-API requests.
-- Updated docs (`README.md`, `QUICK_START.md`, `DEPLOY.md`) with React routes and build/start instructions.
-- Verified frontend production build and root build script.
-- Ran linter diagnostics on changed paths (no reported errors).
+- Reviewed repository state (`README.md`, `package.json`, planning files).
+- Confirmed active stack is Node/Express/Socket.IO + static web frontend.
+- Reset planning artifacts to the Flutter migration objective.
+- Collected full backend endpoint/event map from `server.js`.
+- Confirmed all requested admin controls can be implemented in Flutter using existing API surface.
+- Added MongoDB snapshot persistence to backend with startup restore and graceful shutdown persistence.
+- Added `.env.example` and switched server boot to support `MONGODB_URI`.
+- Implemented Flutter mobile app at `mobile/lib/main.dart` with:
+  - bidder flows (join/register/items/bids/groups/profile)
+  - admin flows (dashboard/items/bidders/groups/auctioneer/checkout)
+- Rewrote setup docs (`README.md`, `QUICK_START.md`) and added `DEPLOY.md`.
+- Ran backend syntax check and startup smoke test.
+- Ran linter diagnostics on changed files (no errors).
+- Added deploy health endpoint (`/health`) and updated deployment docs to use it.
+- Expanded `.gitignore` to cover `.env` and Flutter generated artifacts.
+- Added Docker deployment assets (`Dockerfile`, `docker-compose.yml`) for easy local stack bring-up.
+- Updated `.env.example` to default to local Mongo URI and include Atlas template.
+- Added backend guard for placeholder Mongo URI values.
+- Refactored Flutter code layout into `src/state`, `src/ui`, and `src/app` modules while preserving existing behavior.
+- Updated `mobile/README.md` to reflect the new modular Flutter code structure.
+- Started website-first refactor by introducing `public/app-config.js` and wiring core pages (`index`, `admin`, `display`) to shared event join/passcode logic.
+- Re-scoped planning artifacts for a new frontend-focused refactor request and deployment simplification.
+- Re-assessed project state and confirmed dual-frontend architecture (`public/` static + `web/` React) as the primary refactor target.
+- Replaced `web/` starter app with routed React implementation matching public bidder-facing HTML screens:
+  - join, register, items, item details, my bids, groups, group details, profile
+- Ported core visual language from legacy pages (theme colors, card styles, top header + bottom nav, form/button motifs) into `web/src/index.css` and `web/src/App.css`.
+- Added shared session persistence and API/socket integration in React for live updates and bidder flows.
+- Added React Router setup in `web/src/main.tsx`.
+- Verified frontend build succeeds (`npm run build` in `web/`).
 
 ## In Progress
 - None.
