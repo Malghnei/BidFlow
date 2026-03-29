@@ -38,7 +38,7 @@ type Bidder = {
   paymentLinked?: boolean
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? 'http://localhost:3000'
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? ''
 const LS_KEY = 'bidflow-react-session'
 
 type Session = {
