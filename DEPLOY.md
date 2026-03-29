@@ -3,7 +3,7 @@
 This guide optimizes for:
 - Local-first development
 - One straightforward server deployment path
-- Flutter app build/distribution separately
+- React frontend + Node backend in one deployable service
 
 ## A) Local Development
 
@@ -11,10 +11,27 @@ This guide optimizes for:
 cp .env.example .env
 # set MONGODB_URI and optionally PORT
 npm install
+npm run build
 npm start
 ```
 
 Server starts at `http://localhost:3000`.
+
+### Local web development (optional)
+
+In one terminal:
+
+```bash
+npm start
+```
+
+In another terminal:
+
+```bash
+npm run dev:web
+```
+
+Then open `http://localhost:5173` (proxied to backend API/socket).
 
 ### Optional local Docker stack (app + Mongo)
 
@@ -38,6 +55,8 @@ Works for platforms like Render, Railway, Fly.io, or a small VPS.
 ### 2) Start command
 
 ```bash
+npm install
+npm run build
 npm start
 ```
 
@@ -51,7 +70,15 @@ Use `/health`.
 - If Mongo is unreachable, app falls back to in-memory mode with warning logs.
 - If `MONGODB_URI` contains placeholders (like `<cluster>`), Mongo is intentionally disabled and app runs in-memory mode.
 
-## C) Flutter Distribution
+## C) Web Routes (Production)
+
+- `/` join flow
+- `/register` bidder registration
+- `/items`, `/item/:itemId`, `/groups`, `/group/:groupId`, `/mybids`, `/profile`
+- `/admin` full admin controls
+- `/display` live projector view
+
+## D) Flutter Distribution
 
 Flutter app is in `mobile/`.
 
@@ -73,7 +100,7 @@ flutter build ios --release
 
 Then archive/sign in Xcode for TestFlight/App Store.
 
-## D) Runtime Configuration in Flutter
+## E) Runtime Configuration in Flutter
 
 At app launch, set:
 - Backend URL (public server URL)

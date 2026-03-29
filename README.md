@@ -1,33 +1,35 @@
 # BidFlow - Real-Time Charity Auction Platform
 
 Refactored stack with:
-- Existing web experience retained (`public/*.html`)
-- Mobile client migrated to Flutter for both Android and iOS
+- New modular React + Vite + TypeScript web frontend (`web/`)
+- Existing Node + Socket.IO backend contracts preserved
+- Mobile client retained in Flutter (`mobile/`)
 - MongoDB-backed persistence (snapshot persistence) via `MONGODB_URI`
 
 ## Tech Stack
 
 - **Backend**: Node.js + Express + Socket.IO + Mongoose
-- **Web Frontend**: HTML + Tailwind CSS + Socket.IO client
+- **Web Frontend**: React + Vite + TypeScript + React Router + Socket.IO client
 - **Mobile**: Flutter (single codebase for Android + iOS)
 - **Data**: MongoDB (`MONGODB_URI`) with in-memory fallback
 - **Payments**: simulated checkout/payment status flow
 
 ## Quick Start (Local)
 
-### 1) Backend + Web
+### 1) Backend + Web (Production-like)
 
 ```bash
 cp .env.example .env
 # edit .env and set MONGODB_URI
 npm install
+npm run build
 npm start
 ```
 
 Then open:
-- `http://localhost:3000/admin.html`
-- `http://localhost:3000/display.html`
 - `http://localhost:3000/`
+- `http://localhost:3000/admin`
+- `http://localhost:3000/display`
 
 Demo passcode: `123456`
 
@@ -52,16 +54,20 @@ flutter run
 
 See `mobile/README.md` for full mobile instructions.
 
-## Web Pages
+## Web Routes
 
 | URL | Purpose |
 |-----|---------|
 | `http://localhost:3000/` | bidder join flow |
-| `http://localhost:3000/register.html` | bidder registration |
-| `http://localhost:3000/items.html` | item browsing |
-| `http://localhost:3000/item.html?id=ITEM_ID` | item detail + bids |
-| `http://localhost:3000/admin.html` | full admin dashboard |
-| `http://localhost:3000/display.html` | projector/live display |
+| `http://localhost:3000/register` | bidder registration |
+| `http://localhost:3000/items` | item browsing |
+| `http://localhost:3000/item/:itemId` | item detail + bids |
+| `http://localhost:3000/groups` | group list |
+| `http://localhost:3000/group/:groupId` | group detail |
+| `http://localhost:3000/mybids` | personal bid history |
+| `http://localhost:3000/profile` | bidder profile |
+| `http://localhost:3000/admin` | admin dashboard |
+| `http://localhost:3000/display` | live display/projection |
 
 ## API + Real-time
 
@@ -71,4 +77,4 @@ See `mobile/README.md` for full mobile instructions.
 
 ## Deployment
 
-For local-first and simple server deployment path, see `SETUP_GUIDE.md` and `QUICK_START.md` plus mobile build details in `mobile/README.md`.
+For local-first and simple server deployment path, see `DEPLOY.md` and `QUICK_START.md` plus mobile build details in `mobile/README.md`.

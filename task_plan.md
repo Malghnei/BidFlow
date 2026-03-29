@@ -1,34 +1,37 @@
-# Task Plan: Flutter Migration and Deployment Simplification
+# Task Plan: Frontend Refactor and Deployment Simplification
 
 ## Goal
-Refactor the project to keep the existing backend/web stack and replace any Swift iOS implementation with a single Flutter mobile app targeting both Android and iOS, then provide straightforward deployment and run instructions.
+Refactor the web frontend into a maintainable, modular, production-ready structure aligned with the existing Node/Express backend APIs, and provide easy, copy-paste deployment instructions.
 
 ## Sequence of Execution
 1. **[complete] Context Gathering**
-   - Inspect current repository structure, docs, and runtime stack.
-   - Confirm current planning files exist and repurpose them for this task.
+   - Inspect repository structure, frontend files, docs, and runtime stack.
+   - Confirm existing planning files and repurpose them for this task.
 2. **[complete] Brainstorming Understanding Lock**
-   - Clarify the exact target architecture and scope for "teck stack" migration.
-   - Confirm whether existing web app remains first-class or Flutter should become primary client.
+   - Clarify required target frontend stack and migration depth.
+   - Confirm page parity expectations and acceptable UX changes.
 3. **[complete] Design Selection**
-   - Propose migration approaches and select one with trade-offs.
-   - Capture assumptions and decision log.
+   - Propose 2-3 viable frontend architectures and select one.
+   - Capture assumptions, trade-offs, and decision log.
 4. **[complete] Implementation**
-   - Scaffold Flutter app structure for Android/iOS.
-   - Implement API/socket integration with existing Node backend.
-   - Replace/retire Swift references and update project docs/scripts.
+   - Create frontend app structure, shared modules, and routing strategy.
+   - Migrate existing page functionality (join, register, items, groups, bids, admin, display).
+   - Preserve backend API contracts and realtime Socket.IO behavior.
 5. **[complete] Deployment Simplification**
-   - Add copy-paste setup and deployment instructions for local/dev/prod.
-   - Add build commands for Android APK/AAB and iOS IPA/archive prerequisites.
+   - Add clear local/dev/prod instructions.
+   - Add build/start commands, environment setup, and static hosting notes.
 6. **[complete] Validation**
-   - Run lint/tests/build checks where available.
-   - Verify docs align with actual commands and paths.
+   - Run lint/build/runtime checks for frontend and server.
+   - Verify docs match real commands and app behavior.
 
 ## Errors Encountered
-- `flutter --version` failed in this environment due root-level telemetry permission error; Flutter project generation/verification commands were documented for local non-root execution.
+- TypeScript build errors after initial scaffold:
+  - type-only imports required under `verbatimModuleSyntax`
+  - `useEffect` cleanup returning `Socket` instead of `void`
+  - resolved by converting to type imports and explicit cleanup blocks.
 
 ## Decision Log
-- Keep existing web frontend and backend contracts; add Flutter as additional client.
-- Implement full admin controls in Flutter (dashboard, items, bidders, groups, auctioneer, checkout).
-- Add MongoDB persistence using `MONGODB_URI` from `.env`.
-- Optimize for local-first usage with one simple server deployment path.
+- Existing backend API endpoints and Socket.IO events remain source-of-truth contracts.
+- Refactor focuses on web frontend only for this request.
+- Implemented React SPA in `web/` with route parity for bidder/admin/display pages.
+- Backend now serves `web/dist` when present with SPA fallback; legacy `public/` remains fallback when dist is absent.

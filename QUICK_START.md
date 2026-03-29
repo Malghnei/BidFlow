@@ -1,28 +1,37 @@
-# BidFlow - Quick Start (Flutter + MongoDB)
+# BidFlow - Quick Start (React Web + MongoDB)
 
 ## 5-Minute Setup
 
-### 1) Backend
+### 1) Install dependencies
+
+```bash
+npm install
+cd web && npm install && cd ..
+```
+
+### 2) Build web app
+
+```bash
+npm run build
+```
+
+### 3) Run backend + web
 
 ```bash
 cp .env.example .env
 # set MONGODB_URI
-npm install
 npm start
 ```
 
-### 2) Flutter mobile app
+### 4) Open app
 
-```bash
-cd mobile
-flutter create . --platforms=android,ios --project-name bidflow_mobile
-flutter pub get
-flutter run
-```
+- Bidder: `http://localhost:3000/`
+- Admin: `http://localhost:3000/admin`
+- Live display: `http://localhost:3000/display`
 
 ## What You Get
 
-✅ Existing web app still works (`/admin.html`, `/display.html`, bidder pages)  
+✅ Refactored React web app with route-based pages  
 ✅ Flutter app for Android + iOS  
 ✅ Bidder flow (join/register/items/bids/groups/profile)  
 ✅ Full admin flow (dashboard/items/bidders/groups/auctioneer/checkout)  
@@ -39,8 +48,8 @@ flutter run
 
 ## Fast Demo Flow
 
-1. Open `/admin.html` on laptop
-2. Open `/display.html` on second screen/projector
+1. Open `/admin` on laptop
+2. Open `/display` on second screen/projector
 3. Run Flutter app on mobile and join same event
 4. Register bidder(s), place bids, create groups
 5. Use Flutter admin mode or web admin to open/close items and checkout
