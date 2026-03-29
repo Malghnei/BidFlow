@@ -21,7 +21,14 @@ const io = socketIo(server, {
 // Middleware
 app.use(express.json());
 app.use(cors());
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve React build if it exists, otherwise fall back to public/ HTML pages
+const reactBuildPath = path.join(__dirname, 'web', 'build');
+const fs = require('fs');
+if (fs.existsSync(reactBuildPath)) {
+  app.use(express.static(reactBuildPath));
+} else {
+  app.use(express.static(path.join(__dirname, 'public')));
+}
 app.use((req, res, next) => {
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
     res.on('finish', () => {
@@ -204,6 +211,7 @@ const demoItems = [
   {
     id: "itm_101",
     eventId: DEMO_EVENT_ID,
+    lotNumber: 1,
     title: "Hand-crafted Moroccan Lantern",
     description: "A beautiful, intricate lantern that casts geometric shadows. Perfect for a cozy ambiance.",
     startingBid: 80,
@@ -211,13 +219,16 @@ const demoItems = [
     minIncrement: 5,
     status: "active",
     type: "physical",
-    winnerId: null,
-    winningBidId: null,
+    currentBidderId: null,
+    currentBidType: 'individual',
+    bidCount: 0,
+    activeGroups: [],
     imageIndex: 0
   },
   {
     id: "itm_102",
     eventId: DEMO_EVENT_ID,
+    lotNumber: 2,
     title: "Calligraphy Masterclass (2 hours)",
     description: "Learn the art of traditional Arabic calligraphy from a certified master.",
     startingBid: 150,
@@ -225,13 +236,16 @@ const demoItems = [
     minIncrement: 10,
     status: "active",
     type: "experience",
-    winnerId: null,
-    winningBidId: null,
+    currentBidderId: null,
+    currentBidType: 'individual',
+    bidCount: 0,
+    activeGroups: [],
     imageIndex: 1
   },
   {
     id: "itm_103",
     eventId: DEMO_EVENT_ID,
+    lotNumber: 3,
     title: "Premium Oudh Selection Set",
     description: "An exclusive collection of pure agarwood oils imported straight from the UAE.",
     startingBid: 300,
@@ -239,8 +253,10 @@ const demoItems = [
     minIncrement: 20,
     status: "active",
     type: "physical",
-    winnerId: null,
-    winningBidId: null,
+    currentBidderId: null,
+    currentBidType: 'individual',
+    bidCount: 0,
+    activeGroups: [],
     imageIndex: 2
   }
 ];
@@ -317,80 +333,9 @@ function isValidBidAmount(currentBid, newAmount) {
 // ============================================================================
 
 function seedDemoData() {
-  const eventId = uuidv4();
-  const passcode = '123456';
-
-  // Create demo event
-  events.set(eventId, {
-    id: eventId,
-    name: 'IRC Spring Gala 2026',
-    date: new Date('2026-04-15'),
-    venue: 'Western University',
-    status: 'active',
-    passcode: passcode
-  });
-
-  // Create demo items
-  const demoItems = [
-    {
-      title: 'Weekend Getaway Package',
-      description: 'Luxury weekend package with accommodation and meals',
-      startingBid: 200,
-      imageUrl: 'https://picsum.photos/seed/item1/400/300'
-    },
-    {
-      title: 'Luxury Watch',
-      description: 'Premium timepiece for the sophisticated collector',
-      startingBid: 300,
-      imageUrl: 'https://picsum.photos/seed/item2/400/300'
-    },
-    {
-      title: 'Fine Dining Experience',
-      description: 'Exclusive multi-course dinner at top-rated restaurant',
-      startingBid: 100,
-      imageUrl: 'https://picsum.photos/seed/item3/400/300'
-    },
-    {
-      title: 'Signed Jersey',
-      description: 'Authentic sports memorabilia signed by celebrity athlete',
-      startingBid: 150,
-      imageUrl: 'https://picsum.photos/seed/item4/400/300'
-    },
-    {
-      title: 'Tech Bundle',
-      description: 'Latest gadgets and accessories package',
-      startingBid: 250,
-      imageUrl: 'https://picsum.photos/seed/item5/400/300'
-    },
-    {
-      title: 'Art Collection',
-      description: 'Limited edition art prints from renowned artist',
-      startingBid: 500,
-      imageUrl: 'https://picsum.photos/seed/item6/400/300'
-    }
-  ];
-
-  demoItems.forEach((itemData, index) => {
-    const itemId = uuidv4();
-    items.set(itemId, {
-      id: itemId,
-      eventId: eventId,
-      lotNumber: index + 1,
-      title: itemData.title,
-      description: itemData.description,
-      imageUrl: itemData.imageUrl,
-      startingBid: itemData.startingBid,
-      currentBid: itemData.startingBid,
-      currentBidderId: null,
-      currentBidType: 'individual',
-      bidCount: 0,
-      activeGroups: [],
-      image: itemData.imageUrl,
-      status: 'upcoming'
-    });
-  });
-
-  console.log('Demo data seeded: 1 event with 6 items');
+  // The hardcoded DEMO_EVENT_ID ("evt_000000") and its items are already
+  // populated at module load time above. Nothing extra to create.
+  console.log('Demo data ready: 1 event with', Array.from(items.values()).filter(i => i.eventId === DEMO_EVENT_ID).length, 'items');
 }
 
 // ============================================================================
@@ -403,6 +348,29 @@ function seedDemoData() {
  */
 app.post('/api/auth/join', (req, res) => {
   const { passcode } = req.body;
+
+  if (!passcode) {
+    return res.status(400).json({ error: 'Passcode required' });
+  }
+
+  const event = Array.from(events.values()).find(e => e.passcode === passcode);
+
+  if (!event) {
+    return res.status(401).json({ error: 'Invalid passcode' });
+  }
+
+  res.json({
+    eventId: event.id,
+    eventName: event.name
+  });
+});
+
+/**
+ * GET /api/resolve-event?passcode=...
+ * Resolve event by passcode (used by React frontend)
+ */
+app.get('/api/resolve-event', (req, res) => {
+  const { passcode } = req.query;
 
   if (!passcode) {
     return res.status(400).json({ error: 'Passcode required' });
@@ -1557,6 +1525,13 @@ app.post('/api/events/:eventId/groups/join-by-code', (req, res) => {
 
   res.status(201).json(group);
 });
+
+// Catch-all: serve React index.html for client-side routes (only when React build exists)
+if (fs.existsSync(reactBuildPath)) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(reactBuildPath, 'index.html'));
+  });
+}
 
 // ============================================================================
 // SOCKET.IO EVENT HANDLERS
