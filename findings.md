@@ -2,6 +2,37 @@
 
 ## Research & Discoveries
 
+0. **Current request scope (latest)**: implement backend logic to be fully compatible with `SYSTEM_DESIGN.md`.
+1. **Design doc backend baseline**: Node.js + Fastify + Socket.IO + MongoDB + Redis + Stripe is the target architecture.
+2. **Design doc API contract is explicit**: endpoint families for auth, bidders, items, bids, groups, and checkout with event-scoped paths.
+3. **Design doc rules are strict**: contribution privacy, display-name-only public surfaces, one-group-per-bidder-per-item, atomic group merge, and payment hold lifecycle requirements.
+4. **Realtime requirements are explicit**: named Socket.IO events (`bid:new`, `group:updated`, `group:merged`, `rivalry:update`, `item:opened`, `item:closed`, etc.) and room strategy (`event:*`, `item:*`, `group:*`, `user:*`).
+5. **NFR targets to preserve**: sub-500ms realtime updates and low-latency API behavior, with idempotent submission and persistence expectations.
+6. **User-locked design decisions**:
+   - Backend stack: migrate to Fastify.
+   - Scope: MVP + checkout/payment-hold lifecycle endpoints.
+   - Compatibility: preserve old routes while adding spec routes.
+   - Payments: switchable mode (real Stripe if configured, stub mode otherwise).
+7. **Migration implementation outcome**:
+   - Runtime now uses Fastify as the host server while preserving existing Express route handlers via adapter mounting.
+   - `/v1/*` compatibility is implemented via URL rewrite to `/api/*`, allowing spec-style clients to use the same backend logic.
+   - Added hold lifecycle domain (`paymentHolds`) with persistence and Stripe/stub switchable behavior.
+8. **Added missing endpoint coverage for MVP+checkout**:
+   - bidder payment linking
+   - bidder hold retrieval
+   - item bid history endpoint
+   - checkout capture-all / capture-bidder / manual-pay
+   - admin auth stubs (`/auth/admin/login`, `/auth/refresh`)
+9. **Business rules alignment updates**:
+   - one-group-per-bidder-per-item enforcement
+   - contribution minimum guard (>= 5)
+   - item close now captures winner holds and cancels loser holds
+10. **Verification status**:
+   - Legacy smoke tests (`test_api.js`) pass.
+   - `/v1` smoke tests for join/register/link-payment/bid/holds/capture/manual-pay pass.
+
+## Prior Findings (Historical)
+
 0. **Current request scope (new)**: user requested a frontend-focused refactor and easy deployment instructions, with full implementation.
 1. **Current runtime stack**: The active app is a Node.js + Express + Socket.IO backend with static web pages under `public/`.
 2. **Current package scripts**: Root `package.json` only includes `start`/`dev` running `server.js`; no monorepo tooling is currently configured.

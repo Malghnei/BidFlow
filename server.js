@@ -1,27 +1,27 @@
 require('dotenv').config();
 
 const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
+const fastifyFactory = require('fastify');
+const { Server: SocketIOServer } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const mongoose = require('mongoose');
+const Stripe = require('stripe');
 
-// Initialize Express and Socket.IO
+// Initialize Fastify, legacy Express compatibility app, and Socket.IO.
+const fastify = fastifyFactory({ logger: false });
 const app = express();
-const server = http.createServer(app);
-const io = socketIo(server, {
+const io = new SocketIOServer(fastify.server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE']
   }
 });
 
-// Middleware
+// Middleware (legacy Express routes still mounted for backward compatibility).
 app.use(express.json());
 app.use(cors());
-app.use(express.static(path.join(__dirname, 'public')));
 app.use((req, res, next) => {
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
     res.on('finish', () => {
@@ -29,6 +29,14 @@ app.use((req, res, next) => {
         scheduleStatePersist();
       }
     });
+  }
+  next();
+});
+
+// Expose SYSTEM_DESIGN v1 routes through existing /api handlers.
+app.use((req, _res, next) => {
+  if (req.url === '/v1' || req.url.startsWith('/v1/')) {
+    req.url = `/api${req.url.slice(3) || '/'}`;
   }
   next();
 });
@@ -51,9 +59,15 @@ const bidders = new Map();
 const items = new Map();
 const bids = [];
 const groups = new Map();
+const paymentHolds = new Map();
 
 // Track anonymous bidder numbers per event
 const anonymousCounters = new Map();
+
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const stripeEnabled = Boolean(STRIPE_SECRET_KEY);
+const stripe = stripeEnabled ? new Stripe(STRIPE_SECRET_KEY) : null;
+const DEFAULT_CURRENCY = (process.env.STRIPE_CURRENCY || 'cad').toLowerCase();
 
 // ============================================================================
 // MONGODB SNAPSHOT PERSISTENCE (Demo-friendly persistence layer)
@@ -91,6 +105,7 @@ function getSerializableState() {
     bidders: mapToObject(bidders),
     items: mapToObject(items),
     groups: mapToObject(groups),
+    paymentHolds: mapToObject(paymentHolds),
     anonymousCounters: mapToObject(anonymousCounters),
     bids
   };
@@ -103,6 +118,7 @@ function restoreSerializableState(payload) {
   bidders.clear();
   items.clear();
   groups.clear();
+  paymentHolds.clear();
   anonymousCounters.clear();
   bids.length = 0;
 
@@ -110,6 +126,7 @@ function restoreSerializableState(payload) {
   for (const [k, v] of objectToMap(payload.bidders)) bidders.set(k, v);
   for (const [k, v] of objectToMap(payload.items)) items.set(k, v);
   for (const [k, v] of objectToMap(payload.groups)) groups.set(k, v);
+  for (const [k, v] of objectToMap(payload.paymentHolds)) paymentHolds.set(k, v);
   for (const [k, v] of objectToMap(payload.anonymousCounters)) anonymousCounters.set(k, v);
   if (Array.isArray(payload.bids)) bids.push(...payload.bids);
 }
@@ -308,8 +325,158 @@ function getNextBidderNumber(eventId) {
 /**
  * Validate bid amount
  */
-function isValidBidAmount(currentBid, newAmount) {
-  return typeof newAmount === 'number' && !isNaN(newAmount) && newAmount > currentBid;
+function isValidBidAmount(currentBid, newAmount, minIncrement = 1) {
+  return (
+    typeof newAmount === 'number' &&
+    !isNaN(newAmount) &&
+    newAmount >= Number(currentBid) + Number(minIncrement)
+  );
+}
+
+function makeHoldId() {
+  return `hold_${uuidv4()}`;
+}
+
+function listBidderHolds(eventId, bidderId) {
+  return Array.from(paymentHolds.values()).filter(
+    (hold) => hold.eventId === eventId && hold.bidderId === bidderId
+  );
+}
+
+async function createOrUpdateHold({
+  eventId,
+  bidderId,
+  itemId,
+  groupId = null,
+  amount,
+  reason = 'bid'
+}) {
+  const bidder = bidders.get(bidderId);
+  if (!bidder) return null;
+  const existingHold = Array.from(paymentHolds.values()).find(
+    (hold) =>
+      hold.eventId === eventId &&
+      hold.bidderId === bidderId &&
+      hold.itemId === itemId &&
+      hold.groupId === groupId &&
+      ['pending', 'authorized'].includes(hold.status)
+  );
+
+  try {
+    if (!stripeEnabled || !bidder.paymentMethodId || !bidder.stripeCustomerId) {
+      const hold = existingHold || {
+        id: makeHoldId(),
+        eventId,
+        bidderId,
+        itemId,
+        groupId,
+        stripePaymentIntentId: null,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+      hold.amount = amount;
+      hold.reason = reason;
+      hold.updatedAt = new Date().toISOString();
+      paymentHolds.set(hold.id, hold);
+      return hold;
+    }
+
+    if (existingHold?.stripePaymentIntentId) {
+      const pi = await stripe.paymentIntents.update(existingHold.stripePaymentIntentId, {
+        amount
+      });
+      existingHold.amount = amount;
+      existingHold.status = 'authorized';
+      existingHold.updatedAt = new Date().toISOString();
+      existingHold.stripePaymentIntentId = pi.id;
+      paymentHolds.set(existingHold.id, existingHold);
+      return existingHold;
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: DEFAULT_CURRENCY,
+      customer: bidder.stripeCustomerId,
+      payment_method: bidder.paymentMethodId,
+      confirm: true,
+      capture_method: 'manual',
+      automatic_payment_methods: { enabled: false },
+      metadata: {
+        eventId,
+        bidderId,
+        itemId,
+        groupId: groupId || '',
+        reason
+      }
+    });
+
+    const newHold = {
+      id: makeHoldId(),
+      eventId,
+      bidderId,
+      itemId,
+      groupId,
+      stripePaymentIntentId: paymentIntent.id,
+      amount,
+      status: 'authorized',
+      reason,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    paymentHolds.set(newHold.id, newHold);
+    return newHold;
+  } catch (error) {
+    const fallbackHold = existingHold || {
+      id: makeHoldId(),
+      eventId,
+      bidderId,
+      itemId,
+      groupId,
+      stripePaymentIntentId: null,
+      createdAt: new Date().toISOString()
+    };
+    fallbackHold.amount = amount;
+    fallbackHold.reason = `${reason}:fallback`;
+    fallbackHold.status = 'pending';
+    fallbackHold.lastError = error.message;
+    fallbackHold.updatedAt = new Date().toISOString();
+    paymentHolds.set(fallbackHold.id, fallbackHold);
+    return fallbackHold;
+  }
+}
+
+async function captureHold(hold) {
+  if (!hold) return null;
+  if (hold.status === 'captured') return hold;
+
+  try {
+    if (stripeEnabled && hold.stripePaymentIntentId) {
+      await stripe.paymentIntents.capture(hold.stripePaymentIntentId);
+    }
+  } catch (error) {
+    hold.lastError = error.message;
+  }
+  hold.status = 'captured';
+  hold.updatedAt = new Date().toISOString();
+  paymentHolds.set(hold.id, hold);
+  return hold;
+}
+
+async function cancelHold(hold) {
+  if (!hold) return null;
+  if (hold.status === 'canceled') return hold;
+
+  try {
+    if (stripeEnabled && hold.stripePaymentIntentId) {
+      await stripe.paymentIntents.cancel(hold.stripePaymentIntentId);
+    }
+  } catch (error) {
+    hold.lastError = error.message;
+  }
+  hold.status = 'canceled';
+  hold.updatedAt = new Date().toISOString();
+  paymentHolds.set(hold.id, hold);
+  return hold;
 }
 
 // ============================================================================
@@ -416,7 +583,27 @@ app.post('/api/auth/join', (req, res) => {
 
   res.json({
     eventId: event.id,
-    eventName: event.name
+    eventName: event.name,
+    token: `bidder-${event.id}-${Date.now()}`
+  });
+});
+
+app.post('/api/auth/admin/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+  // MVP compatibility auth token stub.
+  res.json({
+    token: `admin-${Date.now()}`,
+    role: 'admin',
+    email
+  });
+});
+
+app.post('/api/auth/refresh', (_req, res) => {
+  res.json({
+    token: `refresh-${Date.now()}`
   });
 });
 
@@ -528,6 +715,84 @@ app.patch('/api/events/:eventId/bidders/:id', (req, res) => {
   if (anonymityMode) bidder.anonymityMode = anonymityMode;
 
   res.json(bidder);
+});
+
+/**
+ * POST /api/events/:eventId/bidders/:bidderId/link-payment
+ * Attach payment details (real Stripe when configured, stub otherwise).
+ */
+app.post('/api/events/:eventId/bidders/:bidderId/link-payment', async (req, res) => {
+  const { eventId, bidderId } = req.params;
+  const bidder = bidders.get(bidderId);
+  if (!bidder || bidder.eventId !== eventId) {
+    return res.status(404).json({ error: 'Bidder not found' });
+  }
+
+  const { paymentMethodId, email } = req.body || {};
+
+  try {
+    if (stripeEnabled && paymentMethodId) {
+      const customer =
+        bidder.stripeCustomerId
+          ? await stripe.customers.update(bidder.stripeCustomerId, { email: email || bidder.email || undefined })
+          : await stripe.customers.create({
+              email: email || bidder.email || undefined,
+              name: `${bidder.firstName || ''} ${bidder.lastName || ''}`.trim() || bidder.displayName
+            });
+
+      await stripe.paymentMethods.attach(paymentMethodId, { customer: customer.id });
+      bidder.stripeCustomerId = customer.id;
+      bidder.paymentMethodId = paymentMethodId;
+      bidder.paymentLinked = true;
+    } else {
+      bidder.stripeCustomerId = bidder.stripeCustomerId || `cus_stub_${bidder.id}`;
+      bidder.paymentMethodId = paymentMethodId || bidder.paymentMethodId || `pm_stub_${bidder.id}`;
+      bidder.paymentLinked = true;
+    }
+
+    res.json({
+      bidderId,
+      paymentLinked: bidder.paymentLinked,
+      stripeMode: stripeEnabled ? 'live' : 'stub'
+    });
+  } catch (error) {
+    res.status(400).json({ error: 'Failed to link payment method', message: error.message });
+  }
+});
+
+/**
+ * GET /api/events/:eventId/bidders/:bidderId/qr
+ * Return QR payload metadata for bidder code.
+ */
+app.get('/api/events/:eventId/bidders/:bidderId/qr', (req, res) => {
+  const { eventId, bidderId } = req.params;
+  const bidder = bidders.get(bidderId);
+  if (!bidder || bidder.eventId !== eventId) {
+    return res.status(404).json({ error: 'Bidder not found' });
+  }
+  const payload = JSON.stringify({
+    type: 'bidder',
+    eventId,
+    bidderId,
+    bidderCode: bidder.bidderCode
+  });
+  res.json({ payload });
+});
+
+/**
+ * GET /api/events/:eventId/bidders/:bidderId/holds
+ * List bidder payment holds.
+ */
+app.get('/api/events/:eventId/bidders/:bidderId/holds', (req, res) => {
+  const { eventId, bidderId } = req.params;
+  const bidder = bidders.get(bidderId);
+  if (!bidder || bidder.eventId !== eventId) {
+    return res.status(404).json({ error: 'Bidder not found' });
+  }
+  res.json({
+    bidderId,
+    holds: listBidderHolds(eventId, bidderId)
+  });
 });
 
 // ============================================================================
@@ -687,7 +952,7 @@ app.post('/api/events/:eventId/items/:id/open', (req, res) => {
  * POST /api/events/:eventId/items/:id/close
  * Close bidding on an item and determine winner
  */
-app.post('/api/events/:eventId/items/:id/close', (req, res) => {
+app.post('/api/events/:eventId/items/:id/close', async (req, res) => {
   const { eventId, id } = req.params;
 
   const item = items.get(id);
@@ -710,6 +975,21 @@ app.post('/api/events/:eventId/items/:id/close', (req, res) => {
       const bidder = bidders.get(item.currentBidderId);
       winner = bidder ? getDisplayName(bidder) : 'Unknown Bidder';
       winnerType = 'individual';
+    }
+  }
+
+  const itemHolds = Array.from(paymentHolds.values()).filter(
+    (hold) => hold.eventId === eventId && hold.itemId === id && ['pending', 'authorized'].includes(hold.status)
+  );
+  for (const hold of itemHolds) {
+    const holdWins =
+      (winnerType === 'individual' && hold.bidderId === item.currentBidderId) ||
+      (winnerType === 'group' && hold.groupId === item.currentBidderId);
+    if (holdWins) {
+      await captureHold(hold);
+      io.to(`user:${hold.bidderId}`).emit('payment:charged', { amount: hold.amount, itemId: id });
+    } else {
+      await cancelHold(hold);
     }
   }
 
@@ -736,7 +1016,7 @@ app.post('/api/events/:eventId/items/:id/close', (req, res) => {
  * POST /api/events/:eventId/items/:itemId/bids
  * Place a new bid
  */
-app.post('/api/events/:eventId/items/:itemId/bids', (req, res) => {
+app.post('/api/events/:eventId/items/:itemId/bids', async (req, res) => {
   const { eventId, itemId } = req.params;
   const { bidderId, amount } = req.body;
 
@@ -754,9 +1034,10 @@ app.post('/api/events/:eventId/items/:itemId/bids', (req, res) => {
     return res.status(404).json({ error: 'Bidder not found' });
   }
 
-  if (!isValidBidAmount(item.currentBid, amount)) {
+  const minIncrement = item.minIncrement || 5;
+  if (!isValidBidAmount(item.currentBid, amount, minIncrement)) {
     return res.status(400).json({
-      error: `Bid must exceed current bid of $${item.currentBid} by at least $5`
+      error: `Bid must exceed current bid of $${item.currentBid} by at least $${minIncrement}`
     });
   }
 
@@ -788,6 +1069,14 @@ app.post('/api/events/:eventId/items/:itemId/bids', (req, res) => {
   item.currentBidType = 'individual';
   item.bidCount += 1;
 
+  await createOrUpdateHold({
+    eventId,
+    bidderId,
+    itemId,
+    amount,
+    reason: 'individual_bid'
+  });
+
   // Notify all users in event room
   io.to(`event:${eventId}`).emit('bid:new', {
     itemId,
@@ -806,7 +1095,34 @@ app.post('/api/events/:eventId/items/:itemId/bids', (req, res) => {
     });
   }
 
+  io.to(`user:${bidderId}`).emit('payment:held', { amount, itemId });
+
   res.status(201).json(bid);
+});
+
+/**
+ * GET /api/events/:eventId/items/:itemId/bids
+ * Public bid history with display names only.
+ */
+app.get('/api/events/:eventId/items/:itemId/bids', (req, res) => {
+  const { eventId, itemId } = req.params;
+  const item = items.get(itemId);
+  if (!item || item.eventId !== eventId) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+
+  const itemBids = bids
+    .filter((bid) => bid.eventId === eventId && bid.itemId === itemId)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .map((bid) => ({
+      id: bid.id,
+      amount: bid.amount,
+      type: bid.type,
+      displayName: bid.displayName,
+      timestamp: bid.timestamp
+    }));
+
+  res.json({ bids: itemBids });
 });
 
 // ============================================================================
@@ -817,7 +1133,7 @@ app.post('/api/events/:eventId/items/:itemId/bids', (req, res) => {
  * POST /api/events/:eventId/items/:itemId/groups
  * Create a new group bid
  */
-app.post('/api/events/:eventId/items/:itemId/groups', (req, res) => {
+app.post('/api/events/:eventId/items/:itemId/groups', async (req, res) => {
   const { eventId, itemId } = req.params;
   const { bidderId, groupName, name, contribution } = req.body;
   const resolvedGroupName = groupName || name;
@@ -836,8 +1152,19 @@ app.post('/api/events/:eventId/items/:itemId/groups', (req, res) => {
     return res.status(404).json({ error: 'Bidder not found' });
   }
 
-  if (!resolvedGroupName || contribution === undefined || contribution === null || typeof contribution !== 'number' || contribution <= 0) {
-    return res.status(400).json({ error: 'Invalid group name or contribution' });
+  if (!resolvedGroupName || contribution === undefined || contribution === null || typeof contribution !== 'number' || contribution < 5) {
+    return res.status(400).json({ error: 'Invalid group name or contribution (minimum is 5)' });
+  }
+
+  const bidderInAnotherGroup = Array.from(groups.values()).some(
+    (g) =>
+      g.eventId === eventId &&
+      g.itemId === itemId &&
+      g.status === 'active' &&
+      g.members.some((m) => m.bidderId === bidderId)
+  );
+  if (bidderInAnotherGroup) {
+    return res.status(400).json({ error: 'Bidder already belongs to a group on this item' });
   }
 
   const groupId = uuidv4();
@@ -866,6 +1193,15 @@ app.post('/api/events/:eventId/items/:itemId/groups', (req, res) => {
   };
 
   groups.set(groupId, group);
+
+  await createOrUpdateHold({
+    eventId,
+    bidderId,
+    itemId,
+    groupId,
+    amount: contribution,
+    reason: 'group_contribution'
+  });
 
   // Add group to item's activeGroups
   item.activeGroups.push(groupId);
@@ -925,6 +1261,8 @@ app.post('/api/events/:eventId/items/:itemId/groups', (req, res) => {
     groupName
   });
 
+  io.to(`user:${bidderId}`).emit('payment:held', { amount: contribution, itemId });
+
   res.status(201).json({
     ...group,
     joinCode // Return joinCode to group creator
@@ -935,7 +1273,7 @@ app.post('/api/events/:eventId/items/:itemId/groups', (req, res) => {
  * POST /api/events/:eventId/groups/:groupId/join
  * Add a bidder to an existing group
  */
-app.post('/api/events/:eventId/groups/:groupId/join', (req, res) => {
+app.post('/api/events/:eventId/groups/:groupId/join', async (req, res) => {
   const { eventId, groupId } = req.params;
   const { bidderId, contribution } = req.body;
 
@@ -949,14 +1287,26 @@ app.post('/api/events/:eventId/groups/:groupId/join', (req, res) => {
     return res.status(404).json({ error: 'Bidder not found' });
   }
 
-  if (!contribution || typeof contribution !== 'number' || contribution <= 0) {
-    return res.status(400).json({ error: 'Invalid contribution amount' });
+  if (!contribution || typeof contribution !== 'number' || contribution < 5) {
+    return res.status(400).json({ error: 'Invalid contribution amount (minimum is 5)' });
   }
 
   // Check if bidder is already in group
   const alreadyMember = group.members.some(m => m.bidderId === bidderId);
   if (alreadyMember) {
     return res.status(400).json({ error: 'Bidder already in this group' });
+  }
+
+  const bidderInAnotherGroup = Array.from(groups.values()).some(
+    (g) =>
+      g.id !== groupId &&
+      g.eventId === eventId &&
+      g.itemId === group.itemId &&
+      g.status === 'active' &&
+      g.members.some((m) => m.bidderId === bidderId)
+  );
+  if (bidderInAnotherGroup) {
+    return res.status(400).json({ error: 'Bidder already belongs to another group on this item' });
   }
 
   const displayName = getDisplayName(bidder);
@@ -970,6 +1320,15 @@ app.post('/api/events/:eventId/groups/:groupId/join', (req, res) => {
   });
 
   group.totalAmount += contribution;
+
+  await createOrUpdateHold({
+    eventId,
+    bidderId,
+    itemId: group.itemId,
+    groupId,
+    amount: contribution,
+    reason: 'group_contribution'
+  });
 
   const item = items.get(group.itemId);
 
@@ -1034,6 +1393,51 @@ app.post('/api/events/:eventId/groups/:groupId/join', (req, res) => {
     memberCount: group.members.length
   });
 
+  io.to(`user:${bidderId}`).emit('payment:held', { amount: contribution, itemId: group.itemId });
+
+  res.status(201).json(group);
+});
+
+/**
+ * POST /api/events/:eventId/groups/:groupId/add-member
+ * Leader-assisted flow alias to join route contract.
+ */
+app.post('/api/events/:eventId/groups/:groupId/add-member', async (req, res) => {
+  const { eventId, groupId } = req.params;
+  const { bidderId, contribution } = req.body;
+  const group = groups.get(groupId);
+  if (!group || group.eventId !== eventId) {
+    return res.status(404).json({ error: 'Group not found' });
+  }
+  const bidder = bidders.get(bidderId);
+  if (!bidder || bidder.eventId !== eventId) {
+    return res.status(404).json({ error: 'Bidder not found' });
+  }
+  if (!contribution || typeof contribution !== 'number' || contribution < 5) {
+    return res.status(400).json({ error: 'Invalid contribution amount (minimum is 5)' });
+  }
+  if (group.members.some((m) => m.bidderId === bidderId)) {
+    return res.status(400).json({ error: 'Bidder already in this group' });
+  }
+  const displayName = getDisplayName(bidder);
+  group.members.push({ bidderId, displayName, contribution, joinedAt: new Date().toISOString() });
+  group.totalAmount += contribution;
+  await createOrUpdateHold({
+    eventId,
+    bidderId,
+    itemId: group.itemId,
+    groupId,
+    amount: contribution,
+    reason: 'group_contribution'
+  });
+  io.to(`group:${groupId}`).emit('group:joined', { groupId, displayName, memberCount: group.members.length });
+  io.to(`item:${group.itemId}`).emit('group:updated', {
+    groupId,
+    itemId: group.itemId,
+    totalAmount: group.totalAmount,
+    memberCount: group.members.length,
+    groupName: group.groupName
+  });
   res.status(201).json(group);
 });
 
@@ -1041,7 +1445,7 @@ app.post('/api/events/:eventId/groups/:groupId/join', (req, res) => {
  * PATCH /api/events/:eventId/groups/:groupId/members/:bidderId
  * Update member's contribution
  */
-app.patch('/api/events/:eventId/groups/:groupId/members/:bidderId', (req, res) => {
+app.patch('/api/events/:eventId/groups/:groupId/members/:bidderId', async (req, res) => {
   const { eventId, groupId, bidderId } = req.params;
   const { contribution } = req.body;
 
@@ -1055,13 +1459,21 @@ app.patch('/api/events/:eventId/groups/:groupId/members/:bidderId', (req, res) =
     return res.status(404).json({ error: 'Member not found in group' });
   }
 
-  if (contribution <= 0) {
-    return res.status(400).json({ error: 'Invalid contribution amount' });
+  if (contribution < 5) {
+    return res.status(400).json({ error: 'Invalid contribution amount (minimum is 5)' });
   }
 
   const oldContribution = member.contribution;
   member.contribution = contribution;
   group.totalAmount = group.totalAmount - oldContribution + contribution;
+  await createOrUpdateHold({
+    eventId,
+    bidderId,
+    itemId: group.itemId,
+    groupId,
+    amount: contribution,
+    reason: 'group_contribution_adjustment'
+  });
 
   const item = items.get(group.itemId);
 
@@ -1119,6 +1531,8 @@ app.patch('/api/events/:eventId/groups/:groupId/members/:bidderId', (req, res) =
     memberCount: group.members.length,
     groupName: group.groupName
   });
+
+  io.to(`user:${bidderId}`).emit('payment:held', { amount: contribution, itemId: group.itemId });
 
   res.json(group);
 });
@@ -1257,7 +1671,7 @@ app.get('/api/events/:eventId/items/:itemId/groups', (req, res) => {
  * DELETE /api/events/:eventId/groups/:groupId/members/:bidderId
  * Remove member from group
  */
-app.delete('/api/events/:eventId/groups/:groupId/members/:bidderId', (req, res) => {
+app.delete('/api/events/:eventId/groups/:groupId/members/:bidderId', async (req, res) => {
   const { eventId, groupId, bidderId } = req.params;
 
   const group = groups.get(groupId);
@@ -1279,6 +1693,13 @@ app.delete('/api/events/:eventId/groups/:groupId/members/:bidderId', (req, res) 
   group.totalAmount -= removedMember.contribution;
   group.members.splice(memberIndex, 1);
 
+  const openHolds = listBidderHolds(eventId, bidderId).filter(
+    (hold) => hold.groupId === groupId && ['pending', 'authorized'].includes(hold.status)
+  );
+  for (const hold of openHolds) {
+    await cancelHold(hold);
+  }
+
   // If no members left, mark as inactive
   if (group.members.length === 0) {
     group.status = 'lost';
@@ -1294,6 +1715,8 @@ app.delete('/api/events/:eventId/groups/:groupId/members/:bidderId', (req, res) 
     memberCount: group.members.length,
     groupName: group.groupName
   });
+
+  io.to(`user:${bidderId}`).emit('payment:charged', { amount: 0, itemId: group.itemId });
 
   res.json(group);
 });
@@ -1378,7 +1801,71 @@ app.post('/api/events/:eventId/checkout/bidder/:bidderId/pay', (req, res) => {
 
   bidder.paymentLinked = true;
 
-  res.json(bidder);
+  res.json({ bidderId, status: 'manual_paid' });
+});
+
+/**
+ * POST /api/events/:eventId/checkout/capture-all
+ * Capture all currently authorizable winner holds for sold items.
+ */
+app.post('/api/events/:eventId/checkout/capture-all', async (req, res) => {
+  const { eventId } = req.params;
+  const soldItems = Array.from(items.values()).filter((item) => item.eventId === eventId && item.status === 'sold');
+  let captured = 0;
+  let canceled = 0;
+
+  for (const item of soldItems) {
+    const itemHolds = Array.from(paymentHolds.values()).filter(
+      (hold) => hold.eventId === eventId && hold.itemId === item.id && ['pending', 'authorized'].includes(hold.status)
+    );
+    for (const hold of itemHolds) {
+      const isWinner =
+        (item.currentBidType === 'individual' && hold.bidderId === item.currentBidderId) ||
+        (item.currentBidType === 'group' && hold.groupId === item.currentBidderId);
+      if (isWinner) {
+        await captureHold(hold);
+        captured += 1;
+      } else {
+        await cancelHold(hold);
+        canceled += 1;
+      }
+    }
+  }
+
+  res.json({ eventId, captured, canceled });
+});
+
+/**
+ * POST /api/events/:eventId/checkout/bidder/:bidderId/capture
+ * Capture all open holds for a bidder.
+ */
+app.post('/api/events/:eventId/checkout/bidder/:bidderId/capture', async (req, res) => {
+  const { eventId, bidderId } = req.params;
+  const bidder = bidders.get(bidderId);
+  if (!bidder || bidder.eventId !== eventId) {
+    return res.status(404).json({ error: 'Bidder not found' });
+  }
+  const holds = listBidderHolds(eventId, bidderId).filter((h) => ['pending', 'authorized'].includes(h.status));
+  for (const hold of holds) {
+    await captureHold(hold);
+  }
+  res.json({ bidderId, captured: holds.length });
+});
+
+/**
+ * POST /api/events/:eventId/checkout/bidder/:bidderId/manual-pay
+ * Mark bidder as paid manually.
+ */
+app.post('/api/events/:eventId/checkout/bidder/:bidderId/manual-pay', (req, res) => {
+  const { eventId, bidderId } = req.params;
+  const bidder = bidders.get(bidderId);
+  if (!bidder || bidder.eventId !== eventId) {
+    return res.status(404).json({ error: 'Bidder not found' });
+  }
+  bidder.manualPaid = true;
+  bidder.manualPaidAt = new Date().toISOString();
+  bidder.manualReference = req.body?.reference || null;
+  res.json({ bidderId, status: 'manual_paid' });
 });
 
 /**
@@ -1476,7 +1963,7 @@ app.get('/api/events/:eventId/bidders/:bidderId/bids', (req, res) => {
  * POST /api/events/:eventId/groups/:groupId/contribution
  * Convenience: update your own contribution (frontend uses this)
  */
-function handleContributionUpdate(req, res) {
+async function handleContributionUpdate(req, res) {
   const { eventId, groupId } = req.params;
   const { bidderId, contribution, amount } = req.body;
   const resolvedAmount = contribution || amount;
@@ -1487,6 +1974,14 @@ function handleContributionUpdate(req, res) {
   const oldContribution = member.contribution;
   member.contribution = resolvedAmount;
   group.totalAmount = group.totalAmount - oldContribution + resolvedAmount;
+  await createOrUpdateHold({
+    eventId,
+    bidderId,
+    itemId: group.itemId,
+    groupId,
+    amount: resolvedAmount,
+    reason: 'group_contribution_adjustment'
+  });
 
   const item = items.get(group.itemId);
   if (group.totalAmount > item.currentBid) {
@@ -1497,6 +1992,7 @@ function handleContributionUpdate(req, res) {
   }
   io.to(`item:${group.itemId}`).emit('group:updated', { groupId, itemId: group.itemId, totalAmount: group.totalAmount, memberCount: group.members.length, groupName: group.groupName });
   io.to(`group:${groupId}`).emit('group:updated', { groupId, itemId: group.itemId, totalAmount: group.totalAmount, memberCount: group.members.length, groupName: group.groupName });
+  io.to(`user:${bidderId}`).emit('payment:held', { amount: resolvedAmount, itemId: group.itemId });
   res.json(group);
 }
 app.post('/api/events/:eventId/groups/:groupId/contribution', handleContributionUpdate);
@@ -1506,7 +2002,7 @@ app.patch('/api/events/:eventId/groups/:groupId/contribution', handleContributio
  * POST /api/events/:eventId/groups/:groupId/leave
  * Convenience: leave a group
  */
-app.post('/api/events/:eventId/groups/:groupId/leave', (req, res) => {
+app.post('/api/events/:eventId/groups/:groupId/leave', async (req, res) => {
   const { eventId, groupId } = req.params;
   const { bidderId } = req.body;
   const group = groups.get(groupId);
@@ -1515,6 +2011,12 @@ app.post('/api/events/:eventId/groups/:groupId/leave', (req, res) => {
   if (memberIndex === -1) return res.status(404).json({ error: 'Not a member' });
   const removed = group.members.splice(memberIndex, 1)[0];
   group.totalAmount -= removed.contribution;
+  const openHolds = listBidderHolds(eventId, bidderId).filter(
+    (hold) => hold.groupId === groupId && ['pending', 'authorized'].includes(hold.status)
+  );
+  for (const hold of openHolds) {
+    await cancelHold(hold);
+  }
   io.to(`group:${groupId}`).emit('group:updated', { groupId, itemId: group.itemId, totalAmount: group.totalAmount, memberCount: group.members.length, groupName: group.groupName });
   res.json({ success: true });
 });
@@ -1523,7 +2025,7 @@ app.post('/api/events/:eventId/groups/:groupId/leave', (req, res) => {
  * POST /api/events/:eventId/groups/join-by-code
  * Join a group using just the join code (frontend uses this)
  */
-app.post('/api/events/:eventId/groups/join-by-code', (req, res) => {
+app.post('/api/events/:eventId/groups/join-by-code', async (req, res) => {
   const { eventId } = req.params;
   const { joinCode, bidderId, contribution } = req.body;
   const group = Array.from(groups.values()).find(g => g.eventId === eventId && g.joinCode === joinCode && g.status === 'active');
@@ -1532,10 +2034,29 @@ app.post('/api/events/:eventId/groups/join-by-code', (req, res) => {
   const bidder = bidders.get(bidderId);
   if (!bidder) return res.status(404).json({ error: 'Bidder not found' });
   if (group.members.some(m => m.bidderId === bidderId)) return res.status(400).json({ error: 'Already in this group' });
+  const bidderInAnotherGroup = Array.from(groups.values()).some(
+    (g) =>
+      g.id !== group.id &&
+      g.eventId === eventId &&
+      g.itemId === group.itemId &&
+      g.status === 'active' &&
+      g.members.some((m) => m.bidderId === bidderId)
+  );
+  if (bidderInAnotherGroup) {
+    return res.status(400).json({ error: 'Bidder already belongs to another group on this item' });
+  }
 
   const displayName = getDisplayName(bidder);
   group.members.push({ bidderId, displayName, contribution, joinedAt: new Date().toISOString() });
   group.totalAmount += contribution;
+  await createOrUpdateHold({
+    eventId,
+    bidderId,
+    itemId: group.itemId,
+    groupId: group.id,
+    amount: contribution,
+    reason: 'group_contribution'
+  });
 
   const item = items.get(group.itemId);
   if (group.totalAmount > item.currentBid) {
@@ -1549,6 +2070,7 @@ app.post('/api/events/:eventId/groups/join-by-code', (req, res) => {
   }
   io.to(`item:${group.itemId}`).emit('group:updated', { groupId: group.id, itemId: group.itemId, totalAmount: group.totalAmount, memberCount: group.members.length, groupName: group.groupName });
   io.to(`group:${group.id}`).emit('group:joined', { groupId: group.id, displayName, memberCount: group.members.length });
+  io.to(`user:${bidderId}`).emit('payment:held', { amount: contribution, itemId: group.itemId });
   // Send rivalry update
   const itemGroups = Array.from(groups.values()).filter(g => g.itemId === group.itemId && g.status === 'active');
   if (itemGroups.length >= 2) {
@@ -1594,6 +2116,7 @@ io.on('connection', (socket) => {
 async function gracefulShutdown(signal) {
   console.log(`${signal} received: persisting state and shutting down...`);
   await persistStateNow(`shutdown:${signal}`);
+  await fastify.close();
   if (mongoEnabled) {
     await mongoose.disconnect();
   }
@@ -1607,7 +2130,20 @@ process.on('SIGTERM', () => {
   gracefulShutdown('SIGTERM').catch(() => process.exit(1));
 });
 
+async function configureFastifyRuntime() {
+  await fastify.register(require('@fastify/cors'), {
+    origin: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE']
+  });
+  await fastify.register(require('@fastify/static'), {
+    root: path.join(__dirname, 'public')
+  });
+  await fastify.register(require('@fastify/express'));
+  fastify.use(app);
+}
+
 async function bootstrap() {
+  await configureFastifyRuntime();
   await initializePersistenceAndRestore();
 
   // Seed demo data only when no persisted state was restored.
@@ -1616,10 +2152,9 @@ async function bootstrap() {
     await persistStateNow('initial-seed');
   }
 
-  const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => {
-    console.log(`BidFlow server running on http://localhost:${PORT}`);
-  });
+  const PORT = Number(process.env.PORT || 3000);
+  await fastify.listen({ port: PORT, host: '0.0.0.0' });
+  console.log(`BidFlow server running on http://localhost:${PORT}`);
 }
 
 bootstrap().catch((error) => {

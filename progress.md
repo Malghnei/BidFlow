@@ -1,6 +1,35 @@
 # Session Progress
 
 ## Completed
+- Reviewed `SYSTEM_DESIGN.md` in full and extracted backend/API/realtime requirements.
+- Re-scoped planning artifacts (`task_plan.md`, `findings.md`) for backend compatibility work.
+- Collected explicit architecture decisions via brainstorming questions:
+  - Fastify migration
+  - MVP+checkout scope
+  - Backward compatibility required
+  - Switchable Stripe/stub payment mode
+- Migrated server runtime host from pure Express to Fastify + adapter-mounted Express routes.
+- Added v1 API compatibility rewrite (`/v1/*` -> `/api/*`) to align with system design base-path expectations.
+- Added switchable payment hold lifecycle domain with persistence:
+  - create/update hold on bids/contributions
+  - capture/cancel holds on item close and checkout actions
+- Added missing endpoints for compatibility:
+  - `/api/auth/admin/login`
+  - `/api/auth/refresh`
+  - `/api/events/:eventId/bidders/:bidderId/link-payment`
+  - `/api/events/:eventId/bidders/:bidderId/qr`
+  - `/api/events/:eventId/bidders/:bidderId/holds`
+  - `/api/events/:eventId/items/:itemId/bids` (GET)
+  - `/api/events/:eventId/groups/:groupId/add-member`
+  - `/api/events/:eventId/checkout/capture-all`
+  - `/api/events/:eventId/checkout/bidder/:bidderId/capture`
+  - `/api/events/:eventId/checkout/bidder/:bidderId/manual-pay`
+- Enforced one-group-per-bidder-per-item rule and minimum contribution checks.
+- Installed new dependencies for Fastify runtime and Stripe optional integration.
+- Ran smoke tests:
+  - `node test_api.js` (pass)
+  - custom `/v1` flow smoke test (pass)
+- Ran lint diagnostics on changed backend file (no lints).
 - Reviewed repository state (`README.md`, `package.json`, planning files).
 - Confirmed active stack is Node/Express/Socket.IO + static web frontend.
 - Reset planning artifacts to the Flutter migration objective.

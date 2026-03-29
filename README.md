@@ -4,14 +4,15 @@ Refactored stack with:
 - Existing web experience retained (`public/*.html`)
 - Mobile client migrated to Flutter for both Android and iOS
 - MongoDB-backed persistence (snapshot persistence) via `MONGODB_URI`
+- Fastify-hosted backend with backward-compatible legacy routes
 
 ## Tech Stack
 
-- **Backend**: Node.js + Express + Socket.IO + Mongoose
+- **Backend**: Node.js + Fastify (Express compatibility adapter) + Socket.IO + Mongoose
 - **Web Frontend**: HTML + Tailwind CSS + Socket.IO client
 - **Mobile**: Flutter (single codebase for Android + iOS)
 - **Data**: MongoDB (`MONGODB_URI`) with in-memory fallback
-- **Payments**: simulated checkout/payment status flow
+- **Payments**: switchable mode (Stripe live when configured, stub mode otherwise)
 
 ## Quick Start (Local)
 
@@ -66,6 +67,7 @@ See `mobile/README.md` for full mobile instructions.
 ## API + Real-time
 
 - REST APIs under `/api/events/...`
+- SYSTEM_DESIGN-compatible aliases under `/v1/...` (mapped to `/api/...`)
 - Socket.IO events for live auction state (`bid:new`, `group:updated`, `item:opened`, `item:closed`, etc.)
 - Health check endpoint: `/health`
 
