@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BidFlow Admin Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/theme.js"></script>
+  <script src="/app-config.js"></script>
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --primary: var(--theme-primary);
+      --secondary: var(--theme-accent);
+      --light-blue: var(--theme-primaryLight);
+      --text-heading: var(--theme-text);
+      --text-body: var(--theme-textMuted);
+    }
+    
+    
+    
+    
+    .stat-card {
+      background: white;
+      border: 1px solid var(--theme-border);
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+    .sidebar-btn.active {
+      background-color: var(--light-blue);
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .auctioneer-display {
+      background: linear-gradient(135deg, var(--primary) 0%, #2d5a8c 100%);
+      color: white;
+      border-radius: 12px;
+      padding: 2rem;
+    }
+  </style>
+</head>
+<body class="bg-theme-bg geo-pattern font-body">
+  <!-- Top Navigation Bar -->
+  <div class="bg-theme-bgCard border-b" style="border-color: var(--theme-border);">
+    <div class="max-w-full px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <img
+          src="/img/Islamic%20Relief%20Canada.png"
+          alt="Islamic Relief Canada"
+          class="h-10 w-auto"
+        />
+        <div class="text-sm" style="color: var(--text-body);">
+          <span class="font-semibold font-display" id="eventName">Event</span>
+          <span class="ml-3 inline-block px-3 py-1 rounded-full" style="background-color: var(--light-blue); color: var(--primary); font-size: 0.75rem; font-weight: 600;" id="eventStatus">Loading</span>
+        </div>
+      </div>
+      <div class="text-right">
+        <p class="text-xs font-medium" style="color: var(--text-body);">TOTAL RAISED</p>
+        <p class="text-3xl font-bold font-display mt-1" style="color: var(--primary);" id="totalRaised">$0</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex" style="height: calc(100vh - 80px);">
+    <!-- Sidebar Navigation -->
+    <div class="w-64 bg-theme-bgCard border-r" style="border-color: var(--theme-border); overflow-y: auto;">
+      <nav class="p-4 space-y-2">
+        <button onclick="showView('dashboard')" class="sidebar-btn view-btn active w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200">
+          Dashboard
+        </button>
+        <button onclick="showView('items')" class="sidebar-btn view-btn w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200" style="color: var(--text-heading);">
+          Items
+        </button>
+        <button onclick="showView('bidders')" class="sidebar-btn view-btn w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200" style="color: var(--text-heading);">
+          Bidders
+        </button>
+        <button onclick="showView('groups')" class="sidebar-btn view-btn w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200" style="color: var(--text-heading);">
+          Groups
+        </button>
+        <button onclick="showView('auctioneer')" class="sidebar-btn view-btn w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200" style="color: var(--text-heading);">
+          Auctioneer
+        </button>
+        <button onclick="showView('checkout')" class="sidebar-btn view-btn w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200" style="color: var(--text-heading);">
+          Checkout
+        </button>
+      </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 overflow-y-auto">
+      <!-- Dashboard View -->
+      <div id="dashboard-view" class="view active p-8">
+        <h2 class="text-3xl font-bold font-display mb-8" style="color: var(--text-heading);">Dashboard</h2>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-4 gap-4 mb-8">
+          <div class="stat-card hover:shadow-md transition-shadow">
+            <p class="text-sm font-medium uppercase tracking-wide" style="color: var(--text-body);">Total Raised</p>
+            <p class="text-4xl font-bold font-display mt-2" style="color: var(--primary);" id="stat-total">$0</p>
+          </div>
+          <div class="stat-card hover:shadow-md transition-shadow">
+            <p class="text-sm font-medium uppercase tracking-wide" style="color: var(--text-body);">Active Bidders</p>
+            <p class="text-4xl font-bold font-display mt-2" style="color: var(--primary);" id="stat-bidders">0</p>
+          </div>
+          <div class="stat-card hover:shadow-md transition-shadow">
+            <p class="text-sm font-medium uppercase tracking-wide" style="color: var(--text-body);">Active Items</p>
+            <p class="text-4xl font-bold font-display mt-2" style="color: var(--primary);" id="stat-items">0</p>
+          </div>
+          <div class="stat-card hover:shadow-md transition-shadow">
+            <p class="text-sm font-medium uppercase tracking-wide" style="color: var(--text-body);">Active Groups</p>
+            <p class="text-4xl font-bold font-display mt-2" style="color: var(--primary);" id="stat-groups">0</p>
+          </div>
+        </div>
+
+        <!-- Activity and Status -->
+        <div class="grid grid-cols-2 gap-6">
+          <div class="card geo-pattern-card p-6">
+            <h3 class="text-lg font-semibold font-display mb-4" style="color: var(--text-heading);">Recent Bid Activity</h3>
+            <div id="activity-feed" class="max-h-96 overflow-y-auto space-y-3">
+              <div class="text-center py-8" style="color: var(--text-body);">No activity yet</div>
+            </div>
+          </div>
+          <div class="card geo-pattern-card p-6">
+            <h3 class="text-lg font-semibold font-display mb-4" style="color: var(--text-heading);">Item Status</h3>
+            <div id="item-status-overview" class="space-y-3">
+              <div class="text-center py-8" style="color: var(--text-body);">Loading items...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Items View -->
+      <div id="items-view" class="view p-8" style="display: none;">
+        <div class="flex items-center justify-between mb-8">
+          <h2 class="text-3xl font-bold font-display" style="color: var(--text-heading);">Manage Items</h2>
+          <button onclick="openAddItemModal()" class="btn-primary px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            + Add Item
+          </button>
+        </div>
+
+        <div class="card geo-pattern-card overflow-hidden">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b" style="border-color: var(--theme-border); background-color: var(--theme-bgCardAlt);">
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Lot #</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Title</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Starting Bid</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Current Bid</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Status</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Groups</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="items-table-body">
+              <tr>
+                <td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-body);">Loading items...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bidders View -->
+      <div id="bidders-view" class="view p-8" style="display: none;">
+        <div class="flex items-center justify-between mb-8">
+          <h2 class="text-3xl font-bold font-display" style="color: var(--text-heading);">Registered Bidders</h2>
+          <button onclick="openWalkInModal()" class="btn-primary px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            + Register Walk-in
+          </button>
+        </div>
+
+        <input type="text" id="bidder-search" placeholder="Search bidders..." class="w-full px-4 py-2 border rounded-lg mb-6 focus:outline-none focus:ring-2" style="border-color: var(--theme-border); outline-color: var(--theme-primary);">
+
+        <div class="card geo-pattern-card overflow-hidden">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b" style="border-color: var(--theme-border); background-color: var(--theme-bgCardAlt);">
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">#</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Real Name</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Display Name</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Anonymous</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Email</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Phone</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Payment</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Checked In</th>
+              </tr>
+            </thead>
+            <tbody id="bidders-table-body">
+              <tr>
+                <td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-body);">Loading bidders...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Groups View -->
+      <div id="groups-view" class="view p-8" style="display: none;">
+        <h2 class="text-3xl font-bold font-display mb-8" style="color: var(--text-heading);">Manage Groups</h2>
+
+        <div class="card geo-pattern-card overflow-hidden">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b" style="border-color: var(--theme-border); background-color: var(--theme-bgCardAlt);">
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Group Name</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Item</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Join Code</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Members</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Total</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Status</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="groups-table-body">
+              <tr>
+                <td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-body);">Loading groups...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Auctioneer View -->
+      <div id="auctioneer-view" class="view p-8" style="display: none;">
+        <h2 class="text-3xl font-bold font-display mb-8" style="color: var(--text-heading);">Live Auctioneer Control</h2>
+
+        <div class="grid grid-cols-3 gap-6">
+          <!-- Left: Item Selection and Display -->
+          <div class="col-span-2">
+            <!-- Item Selector -->
+            <div class="card geo-pattern-card p-6 mb-6">
+              <label class="block text-sm font-semibold font-display mb-3" style="color: var(--text-heading);">Select Item to Auction</label>
+              <select id="auctioneer-item-select" onchange="selectAuctionItem()" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+                <option value="">-- Choose an item --</option>
+              </select>
+            </div>
+
+            <!-- Current Item Display -->
+            <div class="auctioneer-display mb-6">
+              <p class="text-sm opacity-80 uppercase tracking-wider mb-2">Now Auctioning</p>
+              <h3 class="text-4xl font-bold font-display mb-6" id="auctioneer-item">No Item Selected</h3>
+              <p class="text-6xl font-bold font-display mb-4" style="color: #fcd34d;" id="auctioneer-bid">$0</p>
+              <p class="text-xl opacity-90" id="auctioneer-leader">No bids yet</p>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="grid grid-cols-2 gap-4">
+              <button onclick="openCurrentBidding()" class="btn-primary px-6 py-4 rounded-lg font-bold font-display text-lg hover:opacity-90 transition-opacity">
+                Open Bidding
+              </button>
+              <button onclick="markItemSold()" class="px-6 py-4 rounded-lg font-bold font-display text-lg text-white transition-opacity hover:opacity-90" style="background-color: #dc2626;">
+                SOLD!
+              </button>
+            </div>
+          </div>
+
+          <!-- Right: Live Feeds -->
+          <div class="space-y-6">
+            <!-- Bid Feed -->
+            <div class="card geo-pattern-card p-6">
+              <h3 class="text-lg font-semibold font-display mb-4" style="color: var(--text-heading);">Live Bids</h3>
+              <div id="auctioneer-feed" class="space-y-3 max-h-96 overflow-y-auto">
+                <div class="text-center py-8" style="color: var(--text-body);">Waiting for bids...</div>
+              </div>
+            </div>
+
+            <!-- Group Rivalry -->
+            <div class="card geo-pattern-card p-6">
+              <h3 class="text-lg font-semibold font-display mb-4" style="color: var(--text-heading);">Top Groups</h3>
+              <div id="rivalry-mini-display" class="space-y-2">
+                <div class="text-center py-4" style="color: var(--text-body);">No active groups</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Checkout View -->
+      <div id="checkout-view" class="view p-8" style="display: none;">
+        <div class="flex items-center justify-between mb-8">
+          <h2 class="text-3xl font-bold font-display" style="color: var(--text-heading);">Checkout & Payment</h2>
+          <div class="flex items-center gap-6">
+            <button onclick="exportCSV()" class="btn-primary px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Export CSV
+            </button>
+            <div class="text-right">
+              <p class="text-xs font-medium" style="color: var(--text-body);">TOTAL OWED</p>
+              <p class="text-3xl font-bold font-display mt-1" style="color: var(--primary);" id="total-owed">$0</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-8">
+          <div class="stat-card">
+            <p class="text-sm font-medium uppercase tracking-wide" style="color: var(--text-body);">Total Collected</p>
+            <p class="text-3xl font-bold font-display mt-2" style="color: #16a34a;">$<span id="total-collected">0</span></p>
+          </div>
+          <div class="stat-card">
+            <p class="text-sm font-medium uppercase tracking-wide" style="color: var(--text-body);">Outstanding</p>
+            <p class="text-3xl font-bold font-display mt-2" style="color: #dc2626;">$<span id="total-outstanding">0</span></p>
+          </div>
+        </div>
+
+        <div class="card geo-pattern-card overflow-hidden">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b" style="border-color: var(--theme-border); background-color: var(--theme-bgCardAlt);">
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Item</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Winner</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Amount</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Payment Status</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold font-display uppercase tracking-wide" style="color: var(--text-body);">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="checkout-table-body">
+              <tr>
+                <td colspan="5" class="px-6 py-8 text-center" style="color: var(--text-body);">No sold items yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Item Modal -->
+  <div id="addItemModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-theme-bgCard rounded-lg shadow-lg p-8 w-full max-w-md">
+      <h2 class="text-2xl font-bold font-display mb-6" style="color: var(--text-heading);">Add New Item</h2>
+      <form id="addItemForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Item Title</label>
+          <input type="text" id="itemTitle" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Description</label>
+          <textarea id="itemDescription" rows="4" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Starting Bid ($)</label>
+          <input type="number" id="itemStartingBid" min="0" step="0.01" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Image URL</label>
+          <input type="url" id="itemImage" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+        </div>
+        <div class="flex gap-3 pt-4">
+          <button type="submit" class="flex-1 btn-primary px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Add Item
+          </button>
+          <button type="button" onclick="closeAddItemModal()" class="flex-1 px-4 py-2 rounded-lg border font-medium transition-colors" style="border-color: var(--theme-border); color: var(--text-heading);">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Walk-in Bidder Modal -->
+  <div id="walkInModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-theme-bgCard rounded-lg shadow-lg p-8 w-full max-w-md">
+      <h2 class="text-2xl font-bold font-display mb-6" style="color: var(--text-heading);">Register Walk-in Bidder</h2>
+      <form id="walkInForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Real Name</label>
+          <input type="text" id="walkinName" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Display Name</label>
+          <input type="text" id="walkinDisplay" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Email</label>
+          <input type="email" id="walkinEmail" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-heading);">Phone</label>
+          <input type="tel" id="walkinPhone" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);">
+        </div>
+        <div class="flex gap-3 pt-4">
+          <button type="submit" class="flex-1 btn-primary px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Register
+          </button>
+          <button type="button" onclick="closeWalkInModal()" class="flex-1 px-4 py-2 rounded-lg border font-medium transition-colors" style="border-color: var(--theme-border); color: var(--text-heading);">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Merge Groups Modal -->
+  <div id="mergeModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-theme-bgCard rounded-lg shadow-lg p-8 w-full max-w-md">
+      <h2 class="text-2xl font-bold font-display mb-4" style="color: var(--text-heading);">Merge Groups</h2>
+      <p class="mb-6" style="color: var(--text-body);">Merge another group into <strong id="mergeTargetName"></strong>. All members and contributions will be combined.</p>
+      <div class="mb-6">
+        <label class="block text-sm font-medium mb-2" style="color: var(--text-heading);">Select group to absorb:</label>
+        <select id="mergeSourceSelect" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: var(--theme-border);"></select>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="executeMerge()" class="flex-1 btn-primary px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+          Merge Groups
+        </button>
+        <button onclick="closeMergeModal()" class="flex-1 px-4 py-2 rounded-lg border font-medium transition-colors" style="border-color: var(--theme-border); color: var(--text-heading);">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // XSS Protection Helper
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    let socket = null;
+    let mergeTargetId = null;
+    let eventId = null;
+    let currentView = 'dashboard';
+    let items = [];
+    let bidders = [];
+    let groups = [];
+    let bids = [];
+    let currentItemId = null;
+
+    // Modal visibility helpers
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.remove('hidden');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.add('hidden');
+    }
+
+    // Get event ID by joining with demo passcode
+    async function getEventId() {
+      try {
+        const data = await window.BidFlowConfig.resolveEvent();
+        eventId = data.eventId;
+        document.getElementById('eventName').textContent = data.eventName || 'BidFlow Event';
+        document.getElementById('eventStatus').textContent = 'Live';
+      } catch (e) {
+        console.error('Failed to get event:', e);
+      }
+    }
+
+    // Initialize Socket.IO
+    function initSocket() {
+      socket = io();
+
+      socket.on('connect', async () => {
+        console.log('Connected to server');
+        if (!eventId) await getEventId();
+        socket.emit('join-auction', { eventId });
+        loadInitialData();
+      });
+
+      socket.on('bid:new', (data) => {
+        console.log('New bid:', data);
+        addBidToFeed(data);
+        updateStats();
+        loadItems();
+      });
+
+      socket.on('item:opened', (data) => {
+        console.log('Item opened:', data);
+        loadItems();
+        updateAuctioneerDisplay();
+      });
+
+      socket.on('item:closed', (data) => {
+        console.log('Item closed:', data);
+        loadItems();
+        updateAuctioneerDisplay();
+      });
+
+      socket.on('group:updated', (data) => {
+        console.log('Group updated:', data);
+        loadGroups();
+        updateRivalryDisplay();
+      });
+    }
+
+    // Load initial data
+    async function loadInitialData() {
+      await loadItems();
+      await loadBidders();
+      await loadGroups();
+      updateStats();
+      populateAuctioneerDropdown();
+      updateAuctioneerDisplay();
+    }
+
+    async function loadItems() {
+      try {
+        const response = await fetch(`/api/events/${eventId}/items`);
+        items = await response.json();
+        updateItemsTable();
+        updateItemStatusOverview();
+        populateAuctioneerDropdown();
+      } catch (error) {
+        console.error('Error loading items:', error);
+      }
+    }
+
+    async function loadBidders() {
+      try {
+        const response = await fetch(`/api/events/${eventId}/bidders`);
+        bidders = await response.json();
+        updateBiddersTable();
+      } catch (error) {
+        console.error('Error loading bidders:', error);
+      }
+    }
+
+    async function loadGroups() {
+      try {
+        const response = await fetch(`/api/events/${eventId}/groups`);
+        groups = await response.json();
+        updateGroupsTable();
+        updateRivalryDisplay();
+      } catch (error) {
+        console.error('Error loading groups:', error);
+      }
+    }
+
+    function populateAuctioneerDropdown() {
+      const select = document.getElementById('auctioneer-item-select');
+      if (!select) return;
+
+      const selectedValue = select.value;
+      select.innerHTML = '<option value="">-- Choose an item --</option>' + items.map(item => {
+        const status = item.status || 'pending';
+        const label = `${item.title || 'Untitled'} (${status})`;
+        return `<option value="${esc(item._id || item.id)}" ${item._id === currentItemId || item.id === currentItemId ? 'selected' : ''}>${esc(label)}</option>`;
+      }).join('');
+
+      if (selectedValue) select.value = selectedValue;
+    }
+
+    function selectAuctionItem() {
+      const select = document.getElementById('auctioneer-item-select');
+      const itemId = select.value;
+      if (itemId) {
+        currentItemId = itemId;
+        updateAuctioneerDisplay();
+      }
+    }
+
+    function updateItemsTable() {
+      const tbody = document.getElementById('items-table-body');
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-body);">No items yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = items.map((item, idx) => {
+        const status = item.status || 'pending';
+        const isActive = (status === 'active' || status === 'live');
+        const statusColor = isActive ? '#10b981' : status === 'sold' ? '#3b82f6' : '#f59e0b';
+        const statusBg = isActive ? '#d1fae5' : status === 'sold' ? '#dbeafe' : '#fef3c7';
+        const actionBtn = !isActive
+          ? `<button onclick="openBidding('${esc(item._id || item.id)}')" class="px-3 py-1 rounded font-medium text-sm text-white transition-opacity hover:opacity-90" style="background-color: var(--secondary);">Open</button>`
+          : `<button onclick="closeBidding('${esc(item._id || item.id)}')" class="px-3 py-1 rounded font-medium text-sm text-white transition-opacity hover:opacity-90" style="background-color: #6b7280;">Close</button>`;
+
+        return `
+          <tr class="border-b hover:bg-theme-bgCardAlt" style="border-color: var(--theme-border);">
+            <td class="px-6 py-4 text-sm" style="color: var(--text-heading);">${idx + 1}</td>
+            <td class="px-6 py-4 text-sm font-semibold font-display" style="color: var(--text-heading);">${esc(item.title || 'Untitled')}</td>
+            <td class="px-6 py-4 text-sm" style="color: var(--text-body);">$${(item.startingBid || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 text-sm" style="color: var(--text-body);">$${(item.currentBid || item.startingBid || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 text-sm"><span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium" style="background-color: ${statusBg}; color: ${statusColor};">${esc(status)}</span></td>
+            <td class="px-6 py-4 text-sm" style="color: var(--text-body);">${item.groupCount || 0}</td>
+            <td class="px-6 py-4 text-sm">${actionBtn}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateBiddersTable() {
+      const tbody = document.getElementById('bidders-table-body');
+      if (bidders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-body);">No bidders registered</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = bidders.map((bidder, idx) => `
+        <tr class="border-b hover:bg-theme-bgCardAlt" style="border-color: var(--theme-border);">
+          <td class="px-6 py-4 text-sm" style="color: var(--text-heading);">${idx + 1}</td>
+          <td class="px-6 py-4 text-sm" style="color: var(--text-heading);">${esc(bidder.firstName && bidder.lastName ? bidder.firstName + ' ' + bidder.lastName : bidder.realName || '—')}</td>
+          <td class="px-6 py-4 text-sm font-semibold font-display" style="color: var(--text-heading);">${esc(bidder.displayName || bidder.name || '—')}</td>
+          <td class="px-6 py-4 text-sm" style="color: var(--text-body);">${bidder.anonymityMode ? 'Yes' : 'No'}</td>
+          <td class="px-6 py-4 text-sm" style="color: var(--text-body);">${esc(bidder.email || '—')}</td>
+          <td class="px-6 py-4 text-sm" style="color: var(--text-body);">${esc(bidder.phone || '—')}</td>
+          <td class="px-6 py-4"><span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium" style="background-color: #d1fae5; color: #10b981;">Auto Pay</span></td>
+          <td class="px-6 py-4 text-sm" style="color: var(--text-body);">${bidder.checkedIn ? 'Yes' : 'No'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function updateGroupsTable() {
+      const tbody = document.getElementById('groups-table-body');
+      if (groups.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-body);">No groups yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = groups.map((group) => {
+        const item = items.find(i => i._id === group.itemId || i.id === group.itemId);
+        const itemTitle = item ? item.title : 'Unknown Item';
+        const memberCount = group.members ? group.members.length : 0;
+        const total = group.totalAmount || 0;
+        const status = group.status || 'active';
+        const statusColor = status === 'active' ? '#10b981' : status === 'merged' ? '#f59e0b' : '#6b7280';
+        const statusBg = status === 'active' ? '#d1fae5' : status === 'merged' ? '#fef3c7' : '#f3f4f6';
+
+        const sameItemGroups = groups.filter(g => g.itemId === group.itemId && g.id !== group.id && g.status === 'active');
+
+        const membersHtml = (group.members || []).map(m =>
+          `<div class="flex justify-between py-1 px-2 text-sm" style="color: var(--text-body);"><span>${esc(m.displayName)}</span><span class="font-semibold font-display">$${m.contribution}</span></div>`
+        ).join('');
+
+        const mergeBtn = group.status === 'active' && sameItemGroups.length > 0
+          ? `<button onclick="openMergeModal('${esc(group.id)}','${esc(group.groupName || group.name)}')" class="ml-2 px-3 py-1 rounded text-white text-sm font-medium transition-opacity hover:opacity-90" style="background-color: #f59e0b;">Merge</button>`
+          : '';
+
+        return `
+          <tr class="border-b hover:bg-theme-bgCardAlt" style="border-color: var(--theme-border);">
+            <td class="px-6 py-4 text-sm font-semibold font-display" style="color: var(--text-heading);">${esc(group.groupName || group.name || 'Unnamed')}</td>
+            <td class="px-6 py-4 text-sm" style="color: var(--text-body);">${esc(itemTitle)}</td>
+            <td class="px-6 py-4 text-sm"><code class="px-2 py-1 rounded font-mono text-sm font-bold font-display" style="background-color: #f1f5f9;">${esc(group.joinCode || '—')}</code></td>
+            <td class="px-6 py-4 text-sm" style="color: var(--text-body);">${memberCount}</td>
+            <td class="px-6 py-4 text-sm font-bold font-display" style="color: var(--primary);">$${total}</td>
+            <td class="px-6 py-4"><span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium" style="background-color: ${statusBg}; color: ${statusColor};">${esc(status)}</span></td>
+            <td class="px-6 py-4 text-sm">
+              <button onclick="toggleGroupDetail('${esc(group.id)}')" class="px-3 py-1 rounded text-white text-sm font-medium transition-opacity hover:opacity-90" style="background-color: var(--secondary);">View</button>${mergeBtn}
+            </td>
+          </tr>
+          <tr id="group-detail-${esc(group.id)}" style="display:none;">
+            <td colspan="7" class="px-6 py-4 border-b" style="background-color: var(--theme-bgCardAlt); border-color: var(--theme-border);">
+              <div class="text-sm font-semibold font-display mb-2" style="color: var(--text-heading);">Members & Contributions:</div>
+              ${membersHtml || '<div class="text-sm" style="color: var(--text-body);">No members</div>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateItemStatusOverview() {
+      const container = document.getElementById('item-status-overview');
+      const activeItems = items.filter(i => i.status === 'active' || i.status === 'live');
+      const soldItems = items.filter(i => i.status === 'sold');
+
+      container.innerHTML = `
+        <div class="flex justify-between items-center p-3 border-b" style="border-color: var(--theme-border);">
+          <span class="text-sm" style="color: var(--text-body);">Total Items:</span>
+          <span class="font-bold font-display text-lg" style="color: var(--primary);">${items.length}</span>
+        </div>
+        <div class="flex justify-between items-center p-3 border-b" style="border-color: var(--theme-border);">
+          <span class="text-sm" style="color: var(--text-body);">Currently Bidding:</span>
+          <span class="font-bold font-display text-lg" style="color: var(--primary);">${activeItems.length}</span>
+        </div>
+        <div class="flex justify-between items-center p-3">
+          <span class="text-sm" style="color: var(--text-body);">Sold:</span>
+          <span class="font-bold font-display text-lg" style="color: var(--primary);">${soldItems.length}</span>
+        </div>
+      `;
+    }
+
+    function updateAuctioneerDisplay() {
+      if (!currentItemId || items.length === 0) {
+        document.getElementById('auctioneer-item').textContent = 'No Item Selected';
+        document.getElementById('auctioneer-bid').textContent = '$0';
+        document.getElementById('auctioneer-leader').textContent = 'No bids yet';
+        return;
+      }
+
+      const item = items.find(i => i._id === currentItemId || i.id === currentItemId);
+      if (!item) {
+        document.getElementById('auctioneer-item').textContent = 'Item Not Found';
+        document.getElementById('auctioneer-bid').textContent = '$0';
+        document.getElementById('auctioneer-leader').textContent = 'No bids yet';
+        return;
+      }
+
+      document.getElementById('auctioneer-item').textContent = esc(item.title || 'Untitled');
+      document.getElementById('auctioneer-bid').textContent = '$' + (item.currentBid || item.startingBid || 0).toFixed(2);
+      const topBidder = item.topBidderName || item.topBidder?.displayName || 'No bids yet';
+      document.getElementById('auctioneer-leader').textContent = esc(topBidder);
+    }
+
+    function addBidToFeed(bid) {
+      const feed = document.getElementById('auctioneer-feed');
+      const feedItem = document.createElement('div');
+      feedItem.className = 'p-3 rounded-lg border text-sm';
+      feedItem.style.cssText = 'border-color: var(--theme-border); background-color: var(--theme-bgCardAlt);';
+      feedItem.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="font-semibold font-display" style="color: var(--text-heading);">${esc(bid.displayName || bid.bidderName || 'Anonymous')}</div>
+            <div class="text-xs" style="color: var(--text-body);">${esc(bid.itemTitle || 'Item')}</div>
+          </div>
+          <div class="font-bold font-display text-lg" style="color: var(--primary);">$${bid.amount.toFixed(2)}</div>
+        </div>
+      `;
+      feed.insertBefore(feedItem, feed.firstChild);
+      if (feed.children.length > 10) {
+        feed.removeChild(feed.lastChild);
+      }
+    }
+
+    function updateStats() {
+      const totalRaised = items.reduce((sum, item) => sum + (item.currentBid || item.startingBid || 0), 0);
+      document.getElementById('stat-total').textContent = `$${totalRaised.toFixed(2)}`;
+      document.getElementById('totalRaised').textContent = `$${totalRaised.toFixed(2)}`;
+      document.getElementById('stat-bidders').textContent = bidders.length;
+      document.getElementById('stat-items').textContent = items.filter(i => i.status === 'active' || i.status === 'live').length;
+      document.getElementById('stat-groups').textContent = groups.length;
+    }
+
+    function updateRivalryDisplay() {
+      const container = document.getElementById('rivalry-mini-display');
+      if (!currentItemId || items.length === 0) {
+        container.innerHTML = '<div class="text-center py-4" style="color: var(--text-body);">Select an item</div>';
+        return;
+      }
+
+      const item = items.find(i => i._id === currentItemId || i.id === currentItemId);
+      const itemGroups = groups.filter(g => g.itemId === item._id || g.itemId === item.id);
+
+      if (itemGroups.length === 0) {
+        container.innerHTML = '<div class="text-center py-4" style="color: var(--text-body);">No groups for this item</div>';
+        return;
+      }
+
+      const sorted = itemGroups.sort((a, b) => (b.totalAmount || 0) - (a.totalAmount || 0)).slice(0, 5);
+      container.innerHTML = sorted.map(g => `
+        <div class="flex justify-between items-center py-2 px-3 border-b text-sm" style="border-color: var(--theme-border);">
+          <span class="font-semibold font-display" style="color: var(--text-heading);">${esc(g.groupName || g.name)}</span>
+          <span class="font-bold font-display" style="color: var(--primary);">$${(g.totalAmount || 0).toFixed(2)}</span>
+        </div>
+      `).join('');
+    }
+
+    // View management
+    function showView(viewName) {
+      document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+      document.getElementById(viewName + '-view').style.display = 'block';
+      document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
+      event.target.closest('button').classList.add('active');
+      currentView = viewName;
+    }
+
+    // Group detail toggle
+    function toggleGroupDetail(groupId) {
+      const row = document.getElementById(`group-detail-${esc(groupId)}`);
+      if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+    }
+
+    // Merge modal
+    function openMergeModal(targetId, targetName) {
+      mergeTargetId = targetId;
+      document.getElementById('mergeTargetName').textContent = targetName;
+      const targetGroup = groups.find(g => g.id === targetId);
+      const sameItemGroups = groups.filter(g => g.itemId === targetGroup.itemId && g.id !== targetId && g.status === 'active');
+      document.getElementById('mergeSourceSelect').innerHTML = sameItemGroups.map(g => `<option value="${esc(g.id)}">${esc(g.groupName || g.name)} ($${g.totalAmount}, ${g.members?.length || 0} members)</option>`).join('');
+      openModal('mergeModal');
+    }
+
+    function closeMergeModal() {
+      closeModal('mergeModal');
+      mergeTargetId = null;
+    }
+
+    async function executeMerge() {
+      const sourceId = document.getElementById('mergeSourceSelect').value;
+      if (!mergeTargetId || !sourceId) return;
+      try {
+        const res = await fetch(`/api/events/${eventId}/groups/${mergeTargetId}/merge`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceGroupId: sourceId })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error);
+        }
+        closeMergeModal();
+        await loadGroups();
+        await loadItems();
+        alert('Groups merged successfully!');
+      } catch (e) {
+        alert('Merge failed: ' + e.message);
+      }
+    }
+
+    // CSV Export
+    function exportCSV() {
+      if (!eventId) return alert('No event loaded');
+      window.open(`/api/events/${eventId}/export/csv`, '_blank');
+    }
+
+    // Modal functions
+    function openAddItemModal() {
+      openModal('addItemModal');
+    }
+
+    function closeAddItemModal() {
+      closeModal('addItemModal');
+      document.getElementById('addItemForm').reset();
+    }
+
+    function openWalkInModal() {
+      openModal('walkInModal');
+    }
+
+    function closeWalkInModal() {
+      closeModal('walkInModal');
+      document.getElementById('walkInForm').reset();
+    }
+
+    // API functions
+    async function openBidding(itemId) {
+      try {
+        await fetch(`/api/events/${eventId}/items/${itemId}/open`, { method: 'POST' });
+        loadItems();
+      } catch (error) {
+        console.error('Error opening bidding:', error);
+      }
+    }
+
+    async function openCurrentBidding() {
+      if (!currentItemId) {
+        alert('Please select an item first');
+        return;
+      }
+      await openBidding(currentItemId);
+    }
+
+    async function closeBidding(itemId) {
+      try {
+        await fetch(`/api/events/${eventId}/items/${itemId}/close`, { method: 'POST' });
+        loadItems();
+      } catch (error) {
+        console.error('Error closing bidding:', error);
+      }
+    }
+
+    async function markItemSold() {
+      if (!currentItemId) {
+        alert('No item selected');
+        return;
+      }
+      await closeBidding(currentItemId);
+      currentItemId = null;
+      document.getElementById('auctioneer-item-select').value = '';
+      updateAuctioneerDisplay();
+    }
+
+    // Form submissions
+    document.getElementById('addItemForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const item = {
+        title: document.getElementById('itemTitle').value,
+        description: document.getElementById('itemDescription').value,
+        startingBid: parseFloat(document.getElementById('itemStartingBid').value),
+        image: document.getElementById('itemImage').value
+      };
+      try {
+        const res = await fetch(`/api/events/${eventId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to add item');
+        }
+        closeAddItemModal();
+        loadItems();
+      } catch (error) {
+        console.error('Error adding item:', error);
+        alert('Failed to add item');
+      }
+    });
+
+    document.getElementById('walkInForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fullName = document.getElementById('walkinName').value;
+      const nameParts = fullName.trim().split(/\s+/);
+      const bidder = {
+        firstName: nameParts[0] || fullName,
+        lastName: nameParts.slice(1).join(' ') || fullName,
+        displayName: document.getElementById('walkinDisplay').value,
+        anonymityMode: 'real_name',
+        email: document.getElementById('walkinEmail').value,
+        phone: document.getElementById('walkinPhone').value
+      };
+      try {
+        const res = await fetch(`/api/events/${eventId}/bidders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bidder)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to register bidder');
+        }
+        closeWalkInModal();
+        loadBidders();
+      } catch (error) {
+        console.error('Error registering bidder:', error);
+        alert('Failed to register bidder');
+      }
+    });
+
+    // Close modals on escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAddItemModal();
+        closeWalkInModal();
+        closeMergeModal();
+      }
+    });
+
+    // Initialize on page load
+    window.addEventListener('load', initSocket);
+  </script>
+</body>
+</html>

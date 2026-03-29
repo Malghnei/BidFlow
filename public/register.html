@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - BidFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/theme.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: var(--theme-bgCardAlt);
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        .header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        
+        
+        
+        
+        
+        
+        .option-card {
+            border: 1px solid var(--theme-border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .option-card:hover {
+            border-color: var(--theme-accent);
+            background-color: #eff6ff;
+        }
+        .option-card.selected {
+            border-color: var(--theme-accent);
+            background-color: #eff6ff;
+        }
+        .preview-box {
+            background-color: #eff6ff;
+            border: 1px solid var(--theme-accent);
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+        .error-message {
+            background-color: #fee2e2;
+            border: 1px solid #fecaca;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            color: #991b1b;
+            display: none;
+        }
+        .error-message.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-theme-bg geo-pattern font-body">
+    <div class="header sticky top-0 z-40">
+        <div class="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+            <a href="/index.html" class="text-theme-textMuted hover:text-current transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </a>
+            <h1 class="text-theme-primary font-display text-lg font-semibold font-display">Register as Bidder</h1>
+        </div>
+    </div>
+
+    <div class="max-w-2xl mx-auto px-4 py-8">
+        <div class="card geo-pattern-card p-8">
+            <form id="registerForm" class="space-y-8">
+                <!-- Personal Information -->
+                <div>
+                    <h2 class="text-theme-primary font-display text-lg font-semibold font-display mb-6">Your Information</h2>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="firstName" class="text-theme-text block text-sm font-medium mb-2">First Name</label>
+                                <input type="text" id="firstName" placeholder="John" required>
+                            </div>
+                            <div>
+                                <label for="lastName" class="text-theme-text block text-sm font-medium mb-2">Last Name</label>
+                                <input type="text" id="lastName" placeholder="Doe" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="email" class="text-theme-text block text-sm font-medium mb-2">Email Address</label>
+                            <input type="email" id="email" placeholder="john@example.com" required>
+                        </div>
+                        <div>
+                            <label for="phone" class="text-theme-text block text-sm font-medium mb-2">Phone Number</label>
+                            <input type="tel" id="phone" placeholder="(555) 123-4567" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anonymity Mode -->
+                <div style="border-top: 1px solid #e2e8f0;" class="pt-8">
+                    <h2 class="text-theme-primary font-display text-lg font-semibold font-display mb-6">How You'll Appear</h2>
+                    <div class="space-y-3">
+                        <!-- Real Name -->
+                        <div class="option-card selected" id="realNameCard" onclick="selectMode('realName')">
+                            <div class="flex items-start gap-3">
+                                <input type="radio" id="realName" name="anonymityMode" value="realName" checked style="margin-top: 0.25rem; width: auto; padding: 0; margin-right: 0;">
+                                <label for="realName" class="flex-1 cursor-pointer">
+                                    <div class="text-theme-text font-medium">Use My Real Name</div>
+                                    <div class="text-theme-textMuted text-sm">Appear as John Doe</div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Nickname -->
+                        <div class="option-card" id="nicknameCard" onclick="selectMode('nickname')">
+                            <div class="flex items-start gap-3">
+                                <input type="radio" id="nickname" name="anonymityMode" value="nickname" style="margin-top: 0.25rem; width: auto; padding: 0; margin-right: 0;">
+                                <label for="nickname" class="flex-1 cursor-pointer">
+                                    <div class="text-theme-text font-medium">Use a Nickname</div>
+                                    <div class="text-theme-textMuted text-sm">Choose how you want to be identified</div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Anonymous -->
+                        <div class="option-card" id="anonymousCard" onclick="selectMode('anonymous')">
+                            <div class="flex items-start gap-3">
+                                <input type="radio" id="anonymous" name="anonymityMode" value="anonymous" style="margin-top: 0.25rem; width: auto; padding: 0; margin-right: 0;">
+                                <label for="anonymous" class="flex-1 cursor-pointer">
+                                    <div class="text-theme-text font-medium">Stay Anonymous</div>
+                                    <div class="text-theme-textMuted text-sm">Appear as "Anonymous Bidder"</div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Nickname Input -->
+                        <div id="nicknameInput" style="display: none;" class="pt-4">
+                            <label for="customNickname" class="text-theme-text block text-sm font-medium mb-2">Your Nickname</label>
+                            <input type="text" id="customNickname" placeholder="e.g., The Bidder, Collector Joe">
+                        </div>
+
+                        <!-- Preview -->
+                        <div class="preview-box mt-6">
+                            <p class="text-theme-textMuted text-xs font-medium uppercase tracking-wide mb-2">Preview</p>
+                            <p class="text-theme-primary font-display text-base font-semibold font-display">You'll appear as: <span id="displayNamePreview">John Doe</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div id="errorMessage" class="error-message">
+                    <p id="errorText" style="color: #991b1b;"></p>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="btn-primary w-full text-lg py-3 font-medium">
+                    Complete Registration
+                </button>
+
+                <p class="text-theme-textMuted text-xs text-center">
+                    By registering, you agree to our Terms of Service and Privacy Policy
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function selectMode(mode) {
+            document.getElementById(mode).checked = true;
+            updateAllCards();
+            updateDisplayNamePreview();
+            document.getElementById('nicknameInput').style.display = mode === 'nickname' ? 'block' : 'none';
+        }
+
+        function updateAllCards() {
+            const mode = document.querySelector('input[name="anonymityMode"]:checked').value;
+            document.getElementById('realNameCard').classList.toggle('selected', mode === 'realName');
+            document.getElementById('nicknameCard').classList.toggle('selected', mode === 'nickname');
+            document.getElementById('anonymousCard').classList.toggle('selected', mode === 'anonymous');
+        }
+
+        function updateDisplayNamePreview() {
+            const firstName = document.getElementById('firstName').value || 'John';
+            const lastName = document.getElementById('lastName').value || 'Doe';
+            const mode = document.querySelector('input[name="anonymityMode"]:checked').value;
+            const preview = document.getElementById('displayNamePreview');
+
+            if (mode === 'realName') {
+                preview.textContent = `${firstName} ${lastName}`;
+            } else if (mode === 'nickname') {
+                const nickname = document.getElementById('customNickname').value || 'Your Nickname';
+                preview.textContent = nickname;
+            } else {
+                preview.textContent = 'Anonymous Bidder';
+            }
+        }
+
+        document.getElementById('firstName').addEventListener('input', updateDisplayNamePreview);
+        document.getElementById('lastName').addEventListener('input', updateDisplayNamePreview);
+        document.getElementById('customNickname').addEventListener('input', updateDisplayNamePreview);
+
+        function getDisplayName() {
+            const mode = document.querySelector('input[name="anonymityMode"]:checked').value;
+            if (mode === 'realName') {
+                return `${document.getElementById('firstName').value} ${document.getElementById('lastName').value}`;
+            } else if (mode === 'nickname') {
+                return document.getElementById('customNickname').value;
+            } else {
+                return 'Anonymous Bidder';
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            errorText.textContent = message;
+            errorDiv.classList.add('show');
+            setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const eventId = sessionStorage.getItem('eventId');
+            if (!eventId) {
+                showError('Event ID not found. Please join an event first.');
+                return;
+            }
+
+            const firstName = document.getElementById('firstName').value.trim();
+            const lastName = document.getElementById('lastName').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const displayName = getDisplayName();
+
+            if (!firstName || !lastName || !email || !phone) {
+                showError('Please fill in all fields');
+                return;
+            }
+
+            const btn = document.querySelector('button[type="submit"]');
+            btn.disabled = true;
+
+            try {
+                const modeMap = { realName: 'real_name', nickname: 'nickname', anonymous: 'anonymous' };
+                const mode = document.querySelector('input[name="anonymityMode"]:checked').value;
+
+                const response = await fetch(`/api/events/${eventId}/bidders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        firstName,
+                        lastName,
+                        email,
+                        phone,
+                        displayName,
+                        anonymityMode: modeMap[mode]
+                    })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.message || 'Registration failed');
+                }
+
+                const data = await response.json();
+                sessionStorage.setItem('bidderId', data.id || data.bidderId);
+                sessionStorage.setItem('displayName', displayName);
+                sessionStorage.setItem('bidderCode', data.bidderCode);
+
+                window.location.href = '/items.html';
+            } catch (error) {
+                showError(error.message);
+                btn.disabled = false;
+            }
+        });
+
+        updateDisplayNamePreview();
+    </script>
+</body>
+</html>

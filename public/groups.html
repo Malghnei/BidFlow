@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Groups - BidFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/theme.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: var(--theme-bgCardAlt);
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        .header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        .bid-card {
+            background: white;
+            border: 1px solid var(--theme-border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            gap: 1rem;
+        }
+        .bid-image {
+            width: 80px;
+            height: 80px;
+            background-color: #f1f5f9;
+            border-radius: 0.375rem;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body class="bg-theme-bg geo-pattern font-body overflow-x-hidden">
+    <!-- Unified Top Header -->
+    <header class="fixed top-0 left-0 right-0 z-40 bg-transparent flex justify-between items-center px-8 py-4 pointer-events-none">
+        <h1 class="text-theme-primary font-display text-3xl font-extrabold drop-shadow-sm pointer-events-auto">My Groups</h1>
+        
+        <div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto bg-white/80 backdrop-blur-md px-4 py-1.5 rounded-full border border-theme-border shadow-sm">
+            <img
+                src="/img/Islamic%20Relief%20Canada.png"
+                alt="Islamic Relief Canada"
+                class="h-8 w-auto"
+                onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+            />
+            <span class="font-display font-bold text-theme-primary" style="display: none;">Islamic Relief Canada</span>
+        </div>
+
+        <div class="relative pointer-events-auto group">
+            <button class="p-2 bg-white/80 backdrop-blur-md border border-theme-border rounded-full hover:bg-theme-bgCard transition shadow-sm">
+                <svg class="w-5 h-5 text-theme-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+            </button>
+            <div class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-theme-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                <div class="p-3 border-b border-theme-border"><p class="text-sm font-bold text-theme-text">Updates</p></div>
+                <div class="p-3 text-xs text-theme-textMuted">No new notifications.</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 pt-24 pb-32">
+        <!-- Action Bar -->
+        <div class="flex flex-col md:flex-row gap-4 justify-between items-center mb-8">
+            <div class="relative w-full md:w-96">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-theme-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <input type="text" placeholder="Search my groups..." class="w-full pl-10 pr-4 py-2 border border-theme-border rounded-lg bg-theme-bgCard focus:outline-none focus:border-theme-primary shadow-sm text-sm font-semibold">
+            </div>
+            <button onclick="window.location.href='/items.html'" class="w-full md:w-auto btn-primary flex items-center justify-center gap-2 shadow-sm font-bold shadow-md">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                Join or Create Group
+            </button>
+        </div>
+
+        <!-- Groups Tab -->
+        <div id="groupsTab" class="space-y-4">
+            <div id="groupsList" class="flex flex-col gap-4">
+                <div class="text-center py-12">
+                    <div style="border: 2px solid var(--theme-border); border-top: 2px solid var(--theme-primary);" class="w-8 h-8 rounded-full animate-spin mx-auto"></div>
+                    <p class="text-theme-textMuted mt-4">Loading groups...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- Bottom Navigation -->
+    <div class="app-nav-bar">
+        <a href="/items.html" class="app-nav-item ">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+            </svg>
+            <span>Items</span>
+        </a>
+        <a href="/mybids.html" class="app-nav-item ">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>My Bids</span>
+        </a>
+        <a href="/groups.html" class="app-nav-item active">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+            <span>Groups</span>
+        </a>
+        <a href="/profile.html" class="app-nav-item ">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+            </svg>
+            <span>Profile</span>
+        </a>
+    </div>
+
+
+    <script>
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        let allGroups = [];
+        let socket = null;
+
+        const eventId = sessionStorage.getItem('eventId');
+        const bidderId = sessionStorage.getItem('bidderId');
+
+        if (!eventId || !bidderId) {
+            window.location.href = '/index.html';
+        }
+
+        async function getQuickItemsHtml(isGroup) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/items`);
+                let data = await response.json();
+                if(!data || data.length === 0) return '<p>No items available to team up on.</p>';
+                let label = isGroup ? "Join Group &rarr;" : "Place Bid &rarr;";
+                let html = '<div style="display:flex; gap:16px; overflow-x:auto; padding-bottom:16px; margin-top:16px;">';
+                data.slice(0, 3).forEach(item => {
+                    html += `<a href="/item.html?id=${item.id}" style="min-width: 200px; text-decoration:none; background:white; border:1px solid var(--theme-border); padding:12px; border-radius:8px; text-align:left; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div style="font-weight:bold; color:var(--theme-text); font-family:var(--theme-fontDisplay);">${esc(item.title)}</div>
+                        <div style="color:var(--theme-textMuted); font-size:12px; margin-bottom:8px;">Current: $${item.currentBid || item.startingBid}</div>
+                        <div style="color:var(--theme-accent); font-weight:600; font-size:14px;">${label}</div>
+                    </a>`;
+                });
+                html += '</div>';
+                return html;
+            } catch(e) { return ''; }
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+        }
+
+        async function loadGroups() {
+            try {
+                const response = await fetch(`/api/events/${eventId}/bidders/${bidderId}/groups`);
+                const data = await response.json();
+
+                // FIX: Server returns { groups: [...] } wrapper
+                allGroups = data.groups || [];
+
+                const groupsList = document.getElementById('groupsList');
+                groupsList.innerHTML = '';
+
+                if (allGroups.length === 0) {
+                    groupsList.innerHTML = `
+                        <div style="text-align:center; padding: 2rem 0;">
+                            <p class="text-theme-textMuted text-sm mb-4">You are not in any groups yet. Team up on these live items:</p>
+                            <div id="quickItemsContainerGroups">Loading items...</div>
+                        </div>
+                    `;
+                    document.getElementById('quickItemsContainerGroups').innerHTML = await getQuickItemsHtml(true);
+                } else {
+                    allGroups.forEach(group => {
+                        const div = document.createElement('div');
+                        div.className = 'card geo-pattern-card overflow-hidden hover:shadow-lg transition-transform duration-200 cursor-pointer flex flex-col sm:flex-row w-full';
+                        div.onclick = () => window.location.href=`/group.html?groupId=${esc(group.id)}`;
+                        div.innerHTML = `
+                            <div class="w-full sm:w-48 h-32 bg-theme-bgCardAlt border-r border-theme-border flex items-center justify-center">
+                                <div class="text-theme-textMuted font-display opacity-50 bg-slate-100 w-full h-full flex items-center justify-center">No Image</div>
+                            </div>
+                            <div class="flex-1 p-6 flex flex-col justify-center">
+                                <h3 class="text-theme-text font-semibold font-display text-xl mb-1">${esc(group.name)}</h3>
+                                <p class="text-theme-textMuted text-sm mb-4">${esc(group.itemTitle)}</p>
+                                <div class="flex flex-wrap justify-between items-center gap-6 border-t border-theme-border pt-3">
+                                    <div>
+                                        <p class="text-theme-textMuted text-xs uppercase tracking-wider mb-1">Your contribution</p>
+                                        <p style="color: var(--theme-primary);" class="text-lg font-bold font-display">${formatCurrency(group.yourContribution)}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-theme-textMuted text-xs uppercase tracking-wider mb-1">Group total</p>
+                                        <p style="color: var(--theme-accent);" class="text-lg font-bold font-display">${formatCurrency(group.totalAmount)}</p>
+                                    </div>
+                                    <div class="ml-auto text-theme-primary opacity-60 group-hover:opacity-100 transition-opacity">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        groupsList.appendChild(div);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load groups:', error);
+                document.getElementById('groupsList').innerHTML = '<p style="color: #991b1b;">Failed to load groups</p>';
+            }
+        }
+
+        function initSocket() {
+            socket = io();
+
+            socket.on('connect', () => {
+                socket.emit('join-auction', { eventId, bidderId });
+            });
+
+            socket.on('group:updated', () => {
+                loadGroups();
+            });
+        }
+
+        loadGroups();
+        initSocket();
+    </script>
+</body>
+</html>

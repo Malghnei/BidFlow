@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BidFlow Live Display</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/theme.js"></script>
+  <script src="/app-config.js"></script>
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* minimal specific styles for tug of war transition & confetti */
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      cursor: none;
+      background-color: #000;
+    }
+    .tug-fill {
+      transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .confetti {
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+      top: -20px;
+      z-index: 9999;
+    }
+    .confetti.gold { background: #B88A3E; animation: confettiFall 4s ease-in forwards; }
+    .confetti.blue { background: #1E3A8A; animation: confettiFall 4.5s ease-in forwards; }
+    .confetti.white { background: #ffffff; animation: confettiFall 3.5s ease-in forwards; }
+    @keyframes confettiFall {
+      0% { transform: translateY(0) translateX(0) rotateZ(0deg); opacity: 1; }
+      100% { transform: translateY(100vh) translateX(var(--tx)) rotateZ(360deg); opacity: 0; }
+    }
+    .ticker-feed {
+      display: flex;
+      gap: 4rem;
+      animation: tickerScroll 45s linear infinite;
+      white-space: nowrap;
+    }
+    @keyframes tickerScroll {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+    .pulse-text { animate: pulseText 0.6s ease-out; }
+    @keyframes pulseText {
+      0% { transform: scale(1.08); color: #fbbf24; }
+      100% { transform: scale(1); color: #B88A3E; }
+    }
+  </style>
+</head>
+<body class="bg-black geo-pattern font-body text-white flex flex-col h-screen p-4 md:p-8">
+
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row items-center justify-between border-b-2 border-theme-accent/20 pb-4 gap-4">
+      <div class="flex items-center gap-4">
+        <img
+          src="/img/Islamic%20Relief%20Canada.png"
+          alt="Islamic Relief Canada"
+          class="h-12 md:h-16 w-auto drop-shadow-md"
+        />
+        <div class="text-2xl md:text-5xl font-bold font-display" id="eventName">Event</div>
+      </div>
+      <div class="flex items-center gap-3 bg-red-600/20 border-2 border-red-500 rounded-full px-4 md:px-6 py-2 text-red-500 font-bold tracking-widest uppercase text-sm md:text-base">
+        <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+        LIVE
+      </div>
+      <div class="text-xl md:text-3xl font-extrabold text-theme-accent drop-shadow-md whitespace-nowrap">
+        Total: <span id="totalRaised">$0.00</span>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col items-center justify-center py-8">
+      
+      <!-- Waiting State -->
+      <div id="waitingState" class="flex flex-col items-center gap-8 hidden">
+        <div class="text-2xl md:text-4xl font-bold text-theme-accent">Islamic Relief Canada</div>
+        <div class="text-4xl md:text-6xl font-extrabold text-theme-accent animate-pulse drop-shadow-lg text-center">Awaiting First Item</div>
+      </div>
+
+      <!-- Item + Bidding Display -->
+      <div id="itemBiddingSection" class="w-full max-w-7xl flex flex-col items-center gap-8 md:gap-12 hidden">
+        
+        <!-- Item Info Top Row -->
+        <div class="flex flex-col md:flex-row items-center gap-8 w-full">
+          <div class="w-48 h-48 md:w-64 md:h-64 border-4 border-theme-primary bg-theme-bgCard rounded-2xl flex items-center justify-center overflow-hidden shrink-0 shadow-2xl">
+            <img id="itemImage" class="w-full h-full object-cover hidden" alt="Item" />
+            <div id="itemPlaceholder" class="text-5xl md:text-6xl font-black text-theme-primary/40">ITEM</div>
+          </div>
+          <div class="flex flex-col items-center md:items-start text-center md:text-left">
+            <div id="itemTitle" class="text-4xl md:text-7xl font-extrabold drop-shadow-xl text-white mb-4 line-clamp-2">Item</div>
+            <div id="itemDesc" class="text-lg md:text-2xl text-gray-300 max-w-2xl line-clamp-2 mb-4"></div>
+            <div id="startingBid" class="text-xl md:text-3xl font-bold text-theme-accent">Starting Bid: $0.00</div>
+          </div>
+        </div>
+
+        <!-- Individual Bidding Mode -->
+        <div id="modeBidding" class="flex flex-col items-center w-full hidden">
+          <div id="currentBid" class="text-7xl md:text-[12rem] font-black text-theme-accent drop-shadow-2xl leading-none tracking-tighter transition-transform">$0.00</div>
+          <div id="bidLeader" class="text-3xl md:text-5xl font-bold text-white mt-4 drop-shadow-md">No bids yet</div>
+          <div id="bidMeta" class="text-xl md:text-2xl text-gray-400 mt-2">0 bids</div>
+        </div>
+
+        <!-- Group Rivalry Mode (Tug of War) -->
+        <div id="modeRivalry" class="flex flex-col items-center w-full hidden gap-6 w-full">
+          <div class="text-3xl md:text-5xl font-extrabold text-theme-accent uppercase tracking-widest drop-shadow-md">Team Challenge</div>
+          
+          <div class="w-full flex flex-col md:flex-row items-center justify-between gap-8 md:gap-4 mt-4">
+            <!-- Group A -->
+            <div class="flex flex-col items-center flex-1">
+              <div id="groupAName" class="text-3xl md:text-6xl font-black text-white drop-shadow-xl break-words text-center">Team A</div>
+              <div id="groupAAmount" class="text-5xl md:text-8xl font-black text-white drop-shadow-2xl transition-all duration-500 mt-2">$0.00</div>
+              <div id="groupAMembers" class="text-lg md:text-2xl text-gray-400 mt-2">0 members</div>
+            </div>
+
+            <!-- VS Badge -->
+            <div class="text-4xl md:text-6xl font-black text-theme-accent drop-shadow-md shrink-0">VS</div>
+
+            <!-- Group B -->
+            <div class="flex flex-col items-center flex-1">
+              <div id="groupBName" class="text-3xl md:text-6xl font-black text-white drop-shadow-xl break-words text-center">Team B</div>
+              <div id="groupBAmount" class="text-5xl md:text-8xl font-black text-theme-accent drop-shadow-2xl transition-all duration-500 mt-2">$0.00</div>
+              <div id="groupBMembers" class="text-lg md:text-2xl text-gray-400 mt-2">0 members</div>
+            </div>
+          </div>
+
+          <!-- Tug Bar Container -->
+          <div class="w-full max-w-5xl h-16 md:h-24 bg-white/5 border-4 border-theme-primary/40 rounded-full overflow-hidden shadow-inner flex relative mt-8">
+            <div id="tugFill" class="tug-fill h-full bg-theme-primary flex items-center justify-end px-6 font-black text-2xl md:text-4xl drop-shadow-md" style="width: 50%;"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Sold State -->
+      <div id="soldSection" class="flex flex-col items-center justify-center gap-6 hidden">
+        <div class="text-[6rem] md:text-[14rem] font-black text-theme-accent drop-shadow-2xl leading-none tracking-tighter">SOLD!</div>
+        <div id="soldWinner" class="text-4xl md:text-7xl font-black text-theme-primary drop-shadow-xl mt-4">Winner</div>
+        <div id="soldAmount" class="text-5xl md:text-8xl font-black text-theme-accent drop-shadow-2xl mt-2">$0.00</div>
+      </div>
+      
+    </div>
+
+    <!-- Bottom Ticker -->
+    <div class="bg-white/5 border-2 border-theme-primary/30 rounded-2xl p-4 md:p-6 flex items-center shadow-lg gap-4 md:gap-8 overflow-hidden shrink-0 mt-auto">
+      <div class="text-lg md:text-2xl font-extrabold text-gray-400 tracking-widest shrink-0">RECENT BIDS:</div>
+      <div class="flex-1 overflow-hidden relative border-x-2 border-theme-primary/20 px-4 h-8 md:h-12 flex items-center">
+        <div id="tickerFeed" class="ticker-feed items-center text-lg md:text-2xl font-bold flex gap-12"></div>
+      </div>
+    </div>
+
+  <script>
+    /* XSS Protection */
+    function esc(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    /* State */
+    let socket = null;
+    let eventId = new URLSearchParams(window.location.search).get('eventId') || null;
+    let currentItem = null;
+    let currentMode = 'waiting'; // waiting, bidding, rivalry, sold
+    let items = [];
+    let rivalryData = null;
+    let recentBids = [];
+    let totalRaisedAmount = 0;
+    let inactivityTimer = null;
+
+    /* Auto-hide cursor */
+    function resetCursorTimer() {
+      clearTimeout(inactivityTimer);
+      document.body.style.cursor = 'auto';
+      inactivityTimer = setTimeout(() => {
+        document.body.style.cursor = 'none';
+      }, 3000);
+    }
+    document.addEventListener('mousemove', resetCursorTimer);
+    document.addEventListener('keydown', resetCursorTimer);
+
+    /* Get Event ID via passcode fallback */
+    async function getEventId() {
+      try {
+        const data = await window.BidFlowConfig.resolveEvent();
+        if (data.eventId) {
+          eventId = data.eventId;
+          return true;
+        }
+      } catch (e) {
+        console.error('Failed to get event ID:', e);
+      }
+      return false;
+    }
+
+    /* Socket Initialization */
+    function initSocket() {
+      socket = io();
+
+      socket.on('connect', async () => {
+        console.log('Display connected');
+        if (!eventId) {
+          await getEventId();
+        }
+        if (eventId) {
+          socket.emit('join-auction', { eventId });
+          loadInitialData();
+        }
+      });
+
+      socket.on('bid:new', (data) => {
+        handleNewBid(data);
+        updateTotalRaised();
+      });
+
+      socket.on('item:opened', (data) => {
+        loadItem(data.itemId);
+      });
+
+      socket.on('item:closed', (data) => {
+        enterSoldMode(data);
+      });
+
+      socket.on('rivalry:update', (data) => {
+        rivalryData = data;
+        if (data.groups && data.groups.length >= 2) {
+          currentMode = 'rivalry';
+        } else {
+          currentMode = 'bidding';
+        }
+        displayMode();
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Display disconnected');
+      });
+    }
+
+    /* Load Initial Data */
+    async function loadInitialData() {
+      try {
+        const res = await fetch(`/api/events/${eventId}`);
+        if(res.ok) {
+            const eventData = await res.json();
+            document.getElementById('eventName').textContent = esc(eventData.name || 'Charity Auction');
+        }
+
+        const itemsRes = await fetch(`/api/events/${eventId}/items`);
+        const itemsData = await itemsRes.json();
+        items = Array.isArray(itemsData) ? itemsData : (itemsData.items || []);
+
+        const activeItem = items.find(i => i.status === 'live' || i.status === 'active');
+        if (activeItem) {
+          // Defer to loadItem which accurately fetches group presence
+          loadItem(activeItem._id || activeItem.id);
+        } else if (items.length > 0) {
+          currentItem = items[0];
+          currentMode = 'waiting';
+          displayMode();
+        } else {
+            currentMode = 'waiting';
+            displayMode();
+        }
+
+        updateTotalRaised();
+      } catch (e) {
+        console.error('Error loading initial data:', e);
+      }
+    }
+
+    /* Load Item Details */
+    async function loadItem(itemId) {
+      try {
+        const res = await fetch(`/api/events/${eventId}/items/${itemId}`);
+        const data = await res.json();
+        currentItem = data.item || data;
+        
+        // Dynamically fetch groups to set instant Rivalry mode on UI boot
+        const grpRes = await fetch(`/api/events/${eventId}/items/${itemId}/groups`);
+        if (grpRes.ok) {
+            const groupsRaw = await grpRes.json();
+            const groups = Array.isArray(groupsRaw) ? groupsRaw : (groupsRaw.groups || []);
+            if (groups && groups.length >= 2) {
+                rivalryData = { groups: groups.map(g => ({ name: g.groupName, total: g.totalAmount, members: g.members })) };
+                currentMode = 'rivalry';
+            } else {
+                currentMode = 'bidding';
+            }
+        } else {
+            currentMode = 'bidding';
+        }
+        
+        displayMode();
+        updateTotalRaised();
+      } catch (e) {
+        console.error('Error loading item:', e);
+      }
+    }
+
+    /* Display Mode */
+    function displayMode() {
+      hideAllModes();
+
+      if (currentMode === 'waiting' || !currentItem) {
+        document.getElementById('waitingState').classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('itemBiddingSection').classList.remove('hidden');
+      updateItemDisplay();
+
+      if (currentMode === 'rivalry' && rivalryData && rivalryData.groups && rivalryData.groups.length >= 2) {
+        document.getElementById('modeRivalry').classList.remove('hidden');
+        displayRivalryMode();
+      } else {
+        document.getElementById('modeBidding').classList.remove('hidden');
+        displayBiddingMode();
+      }
+    }
+
+    function hideAllModes() {
+      document.getElementById('waitingState').classList.add('hidden');
+      document.getElementById('itemBiddingSection').classList.add('hidden');
+      document.getElementById('modeBidding').classList.add('hidden');
+      document.getElementById('modeRivalry').classList.add('hidden');
+      document.getElementById('soldSection').classList.add('hidden');
+    }
+
+    /* Update Item Display */
+    function updateItemDisplay() {
+      const title = currentItem.title || 'Untitled';
+      const desc = currentItem.description || '';
+      const startingBid = currentItem.startingBid || 0;
+
+      document.getElementById('itemTitle').textContent = esc(title);
+      document.getElementById('itemDesc').textContent = esc(desc);
+      document.getElementById('startingBid').textContent = 'Starting Bid: $' + startingBid.toFixed(2);
+
+      const imgEl = document.getElementById('itemImage');
+      const placeholderEl = document.getElementById('itemPlaceholder');
+
+      if (currentItem.image || currentItem.imageUrl) {
+        imgEl.src = currentItem.image || currentItem.imageUrl;
+        imgEl.classList.remove('hidden');
+        placeholderEl.classList.add('hidden');
+      } else {
+        imgEl.classList.add('hidden');
+        placeholderEl.classList.remove('hidden');
+      }
+    }
+
+    /* Display Bidding Mode */
+    function displayBiddingMode() {
+      const currentBid = currentItem.currentBid || currentItem.startingBid || 0;
+      const leader = currentItem.topBidderName || 'No bids yet';
+      const bidCount = currentItem.bidCount || 0;
+
+      const bidEl = document.getElementById('currentBid');
+      bidEl.textContent = '$' + currentBid.toFixed(2);
+      
+      // trigger bounce animation via generic reflow
+      bidEl.classList.remove('pulse-text');
+      void bidEl.offsetWidth; 
+      bidEl.classList.add('pulse-text');
+
+      document.getElementById('bidLeader').textContent = esc(leader);
+      document.getElementById('bidMeta').textContent = `${bidCount} bid${bidCount !== 1 ? 's' : ''}`;
+    }
+
+    /* Display Rivalry Mode */
+    function displayRivalryMode() {
+      const groups = rivalryData.groups.slice(0, 2);
+      const groupA = groups[0] || {};
+      const groupB = groups[1] || {};
+
+      document.getElementById('groupAName').textContent = esc(groupA.name || 'Team A');
+      document.getElementById('groupBName').textContent = esc(groupB.name || 'Team B');
+
+      const amountA = (groupA.total || 0) / 100; // API may return cents
+      const amountB = (groupB.total || 0) / 100;
+      const combined = amountA + amountB || 1;
+      const percentA = (amountA / combined) * 100;
+
+      animateAmount('groupAAmount', amountA);
+      animateAmount('groupBAmount', amountB);
+
+      document.getElementById('groupAMembers').textContent = `${groupA.members?.length || groupA.memberCount || 0} members`;
+      document.getElementById('groupBMembers').textContent = `${groupB.members?.length || groupB.memberCount || 0} members`;
+
+      const tugFill = document.getElementById('tugFill');
+      tugFill.style.width = percentA + '%';
+      if(percentA < 50) {
+        tugFill.classList.remove('justify-start');
+        tugFill.classList.add('justify-end');
+      } else {
+        tugFill.classList.remove('justify-end');
+        tugFill.classList.add('justify-start');
+      }
+    }
+
+    /* Animate Amount */
+    function animateAmount(elementId, targetAmount) {
+      const el = document.getElementById(elementId);
+      const currentStr = el.textContent.replace('$', '').replace(/,/g, '');
+      const current = parseFloat(currentStr) || 0;
+      const diff = targetAmount - current;
+      const steps = 30;
+      let step = 0;
+
+      const interval = setInterval(() => {
+        step++;
+        const progress = step / steps;
+        const value = current + diff * progress;
+        el.textContent = '$' + value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        if (step >= steps) {
+          el.textContent = '$' + targetAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+          clearInterval(interval);
+        }
+      }, 30);
+    }
+
+    /* Handle New Bid */
+    function handleNewBid(bid) {
+      recentBids.unshift(bid);
+      if (recentBids.length > 10) {
+        recentBids.pop();
+      }
+
+      if (currentItem && (currentItem._id === bid.itemId || currentItem.id === bid.itemId)) {
+        currentItem.currentBid = bid.amount;
+        currentItem.topBidderName = bid.displayName || bid.bidderName || 'Anonymous';
+        currentItem.bidCount = (currentItem.bidCount || 0) + 1;
+      }
+
+      updateTickerFeed();
+      displayMode();
+    }
+
+    /* Update Ticker Feed */
+    function updateTickerFeed() {
+      const feedEl = document.getElementById('tickerFeed');
+      let html = '';
+
+      const bidsToShow = recentBids.slice(0, 5);
+      if (bidsToShow.length === 0) return;
+
+      for (let i = 0; i < 3; i++) {
+        bidsToShow.forEach(bid => {
+          const name = esc(bid.bidderName || bid.displayName || 'Anonymous');
+          // If amounts are in cents, divide by 100 if necessary. Assuming typical format:
+          const amt = (bid.amount > 1000) ? bid.amount/100 : bid.amount;
+          const displayAmt = amt ? amt.toFixed(2) : '0.00';
+          
+          html += `
+            <div class="flex items-center gap-2">
+              <span class="text-theme-accent font-black text-xl md:text-3xl">+$${displayAmt}</span>
+              <span class="text-gray-300">by ${name}</span>
+            </div>
+          `;
+        });
+      }
+
+      feedEl.innerHTML = html;
+    }
+
+    /* Enter Sold Mode */
+    function enterSoldMode(data) {
+      hideAllModes();
+      currentMode = 'sold';
+      document.getElementById('soldSection').classList.remove('hidden');
+
+      const winner = esc(data.winner || data.topBidderName || 'Winner');
+      const amount = data.finalAmount || data.currentBid || data.amount || 0;
+
+      document.getElementById('soldWinner').textContent = winner;
+      document.getElementById('soldAmount').textContent = '$' + amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+      createConfetti();
+
+      setTimeout(() => {
+        currentMode = 'waiting';
+        displayMode();
+      }, 8000);
+    }
+
+    /* Create Confetti */
+    function createConfetti() {
+      const colors = ['gold', 'blue', 'white'];
+      const confettiCount = 100;
+
+      for (let i = 0; i < confettiCount; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti ' + colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.left = Math.random() * 100 + '%';
+        confetti.style.setProperty('--tx', (Math.random() - 0.5) * 200 + 'px');
+        confetti.style.animationDelay = Math.random() * 0.4 + 's';
+        document.body.appendChild(confetti);
+
+        setTimeout(() => {
+          if (confetti.parentNode) confetti.remove();
+        }, 4500);
+      }
+    }
+
+    /* Update Total Raised */
+    async function updateTotalRaised() {
+      try {
+        const res = await fetch(`/api/events/${eventId}/items`);
+        const itemsData = await res.json();
+        const itemsArr = Array.isArray(itemsData) ? itemsData : (itemsData.items || []);
+        
+        let total = 0;
+        itemsArr.forEach(i => {
+          if ((i.status === 'sold' || i.status === 'live' || i.status === 'active') && i.currentBid) {
+            total += i.currentBid;
+          }
+        });
+        
+        document.getElementById('totalRaised').textContent = '$' + total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      } catch (e) {
+        console.error('Error updating total:', e);
+      }
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', initSocket);
+  </script>
+</body>
+</html>

@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Item Details - BidFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/theme.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: var(--theme-bgCardAlt);
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        .header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        
+        
+        
+        
+        .btn-secondary {
+            background-color: #e2e8f0;
+            color: #0f172a;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .btn-secondary:hover {
+            background-color: #cbd5e1;
+        }
+        input, textarea {
+            border: 1px solid var(--theme-border);
+            border-radius: 0.375rem;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--theme-accent);
+            box-shadow: 0 0 0 3px #eff6ff;
+        }
+        .bid-box {
+            background-color: #eff6ff;
+            border: 1px solid var(--theme-accent);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+        }
+        .item-image {
+            width: 100%;
+            height: 400px;
+            background-color: #f1f5f9;
+            object-fit: cover;
+            border-radius: 0.5rem;
+        }
+        .bid-history {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .error-message {
+            background-color: #fee2e2;
+            border: 1px solid #fecaca;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            color: #991b1b;
+            display: none;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 50;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .modal.show {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            max-width: 28rem;
+            width: 100%;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-theme-bg geo-pattern font-body">
+    <div class="header sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
+            <button onclick="window.history.back()" class="text-theme-textMuted">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </button>
+            <h1 class="text-theme-primary font-display text-lg font-semibold font-display" id="itemTitle">Item Details</h1>
+        </div>
+    </div>
+
+    <div class="class="max-w-4xl mx-auto px-4 py-8" pb-32">
+        <!-- Item Image -->
+        <img id="itemImage" src="" alt="Item" class="item-image mb-8">
+
+        <!-- Item Info -->
+        <div class="card geo-pattern-card p-6 mb-8">
+            <h2 id="itemName" class="text-theme-primary font-display text-3xl font-bold mb-4"></h2>
+            <p id="itemDescription" class="text-theme-textMuted text-base mb-8"></p>
+
+            <!-- Current Bid -->
+            <div class="bid-box mb-8">
+                <p class="text-theme-textMuted text-xs font-medium uppercase tracking-wide mb-2">Current Bid</p>
+                <p class="text-theme-primary font-display" id="currentBidDisplay" class="text-5xl font-bold font-display">$0.00</p>
+            </div>
+
+            <!-- Bid History -->
+            <div>
+                <h3 class="text-theme-primary font-display text-lg font-semibold font-display mb-4">Recent Bids</h3>
+                <div id="bidHistory" class="bid-history space-y-2 bg-gray-50 rounded-lg p-6">
+                    <p class="text-theme-textMuted text-center text-sm py-4">No bids yet</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bidding Section -->
+        <div class="card geo-pattern-card p-6 mb-8">
+            <h3 class="text-theme-primary font-display text-lg font-semibold font-display mb-6">Place Your Bid</h3>
+            <div class="space-y-4">
+                <div>
+                    <label for="bidAmount" class="text-theme-text block text-sm font-medium mb-2">Bid Amount</label>
+                    <input type="number" id="bidAmount" placeholder="Enter amount" min="0" step="0.01" class="text-lg font-semibold font-display">
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="button" class="btn-secondary" onclick="setQuickBid(5)">+$5</button>
+                    <button type="button" class="btn-secondary" onclick="setQuickBid(10)">+$10</button>
+                    <button type="button" class="btn-secondary" onclick="setQuickBid(25)">+$25</button>
+                    <button type="button" class="btn-secondary" onclick="setQuickBid(50)">+$50</button>
+                </div>
+
+                <button id="placeBidBtn" onclick="placeBid()" class="btn-primary w-full text-lg py-3 font-medium">Place Bid</button>
+
+                <div id="bidError" class="error-message"></div>
+            </div>
+        </div>
+
+        <!-- Group Bidding Section -->
+        <div class="card geo-pattern-card p-6 mb-8">
+            <h3 class="text-theme-primary font-display text-lg font-semibold font-display mb-6">Group Bidding</h3>
+
+            <div class="grid grid-cols-2 gap-3 mb-8">
+                <button onclick="openCreateGroupModal()" class="btn-primary py-3 font-medium text-sm">Start a Group</button>
+                <button onclick="openJoinGroupModal()" class="bg-slate-600 text-white hover:bg-slate-700 py-3 font-medium text-sm border-none rounded-lg cursor-pointer hover:opacity-90">Join a Group</button>
+            </div>
+
+            <div id="groupsList" class="space-y-3">
+                <p class="text-theme-textMuted text-center text-sm py-6">No groups yet. Start one to team up with other bidders!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div id="createGroupModal" class="modal">
+        <div class="modal-content">
+            <h2 class="text-theme-primary font-display text-lg font-semibold font-display mb-6">Start a Group</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="groupName" class="text-theme-text block text-sm font-medium mb-2">Group Name</label>
+                    <input type="text" id="groupName" placeholder="e.g., The Dream Team">
+                </div>
+                <div>
+                    <label for="groupContribution" class="text-theme-text block text-sm font-medium mb-2">Your Contribution</label>
+                    <input type="number" id="groupContribution" placeholder="$0.00" min="0" step="0.01">
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeCreateGroupModal()" class="btn-secondary flex-1 py-2">Cancel</button>
+                    <button type="button" onclick="createGroup()" class="btn-primary flex-1 py-2">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Group Modal -->
+    <div id="joinGroupModal" class="modal">
+        <div class="modal-content">
+            <h2 class="text-theme-primary font-display text-lg font-semibold font-display mb-6">Join a Group</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="joinCode" class="text-theme-text block text-sm font-medium mb-2">Join Code</label>
+                    <input type="text" id="joinCode" placeholder="Enter 4-digit code" maxlength="4" inputmode="numeric" class="text-center text-xl font-bold font-display tracking-widest">
+                </div>
+                <div>
+                    <label for="joinContribution" class="text-theme-text block text-sm font-medium mb-2">Your Contribution</label>
+                    <input type="number" id="joinContribution" placeholder="$0.00" min="0" step="0.01">
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeJoinGroupModal()" class="btn-secondary flex-1 py-2">Cancel</button>
+                    <button type="button" onclick="joinGroup()" class="btn-primary flex-1 py-2">Join</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        let item = null;
+        let currentBid = 0;
+        let socket = null;
+
+        const eventId = sessionStorage.getItem('eventId');
+        const bidderId = sessionStorage.getItem('bidderId');
+
+        if (!eventId || !bidderId) {
+            window.location.href = '/index.html';
+        }
+
+        function getItemId() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('itemId');
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+        }
+
+        function updateBidDisplay() {
+            document.getElementById('currentBidDisplay').textContent = formatCurrency(currentBid);
+            const minBid = currentBid + 5;
+            document.getElementById('bidAmount').placeholder = `Min: ${formatCurrency(minBid)}`;
+            document.getElementById('bidAmount').value = '';
+        }
+
+        function addBidToHistory(bidderName, amount, timestamp) {
+            const history = document.getElementById('bidHistory');
+            if (history.querySelector('p')) {
+                history.innerHTML = '';
+            }
+            const entry = document.createElement('div');
+            entry.style.cssText = 'background: white; border: 1px solid var(--theme-border); border-radius: 0.375rem; padding: 0.75rem; display: flex; justify-content: space-between; align-items: center;';
+            const time = new Date(timestamp).toLocaleTimeString();
+            entry.innerHTML = `
+                <div>
+                    <p style="color: #0f172a; font-weight: 600; font-size: 0.875rem;">${esc(bidderName)}</p>
+                    <p style="color: #475569; font-size: 0.75rem;">${time}</p>
+                </div>
+                <p style="color: var(--theme-accent); font-weight: 700;">${formatCurrency(amount)}</p>
+            `;
+            history.insertBefore(entry, history.firstChild);
+        }
+
+        function setQuickBid(increment) {
+            const current = parseFloat(document.getElementById('bidAmount').value || currentBid || 0);
+            document.getElementById('bidAmount').value = (current + increment).toFixed(2);
+        }
+
+        async function placeBid() {
+            const bidAmount = parseFloat(document.getElementById('bidAmount').value);
+            const itemId = getItemId();
+
+            if (!bidAmount || bidAmount <= currentBid) {
+                const errorDiv = document.getElementById('bidError');
+                errorDiv.textContent = `Bid must be greater than ${formatCurrency(currentBid)}`;
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const btn = document.getElementById('placeBidBtn');
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/events/${eventId}/items/${itemId}/bids`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: bidAmount, bidderId })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.message || 'Failed to place bid');
+                }
+
+                currentBid = bidAmount;
+                updateBidDisplay();
+                document.getElementById('bidError').style.display = 'none';
+            } catch (error) {
+                document.getElementById('bidError').textContent = error.message;
+                document.getElementById('bidError').style.display = 'block';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function openCreateGroupModal() {
+            document.getElementById('createGroupModal').classList.add('show');
+        }
+
+        function closeCreateGroupModal() {
+            document.getElementById('createGroupModal').classList.remove('show');
+            document.getElementById('groupName').value = '';
+            document.getElementById('groupContribution').value = '';
+        }
+
+        function openJoinGroupModal() {
+            document.getElementById('joinGroupModal').classList.add('show');
+        }
+
+        function closeJoinGroupModal() {
+            document.getElementById('joinGroupModal').classList.remove('show');
+            document.getElementById('joinCode').value = '';
+            document.getElementById('joinContribution').value = '';
+        }
+
+        async function createGroup() {
+            const groupName = document.getElementById('groupName').value.trim();
+            const contribution = parseFloat(document.getElementById('groupContribution').value);
+            const itemId = getItemId();
+
+            if (!groupName || !contribution) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/events/${eventId}/items/${itemId}/groups`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: groupName, contribution, bidderId })
+                });
+
+                if (!response.ok) throw new Error('Failed to create group');
+
+                closeCreateGroupModal();
+                loadGroups();
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function joinGroup() {
+            const joinCode = document.getElementById('joinCode').value.trim();
+            const contribution = parseFloat(document.getElementById('joinContribution').value);
+
+            if (!joinCode || !contribution) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/events/${eventId}/groups/join-by-code`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ joinCode, contribution, bidderId })
+                });
+
+                if (!response.ok) throw new Error('Failed to join group');
+
+                closeJoinGroupModal();
+                loadGroups();
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function loadGroups() {
+            const itemId = getItemId();
+
+            try {
+                const response = await fetch(`/api/events/${eventId}/items/${itemId}`);
+                const data = await response.json();
+
+                const itemData = data.item || data;
+                const groups = itemData.activeGroups || [];
+                const groupsList = document.getElementById('groupsList');
+
+                if (groups.length === 0) {
+                    groupsList.innerHTML = '<p class="text-theme-textMuted text-center text-sm py-6">No groups yet. Start one to team up!</p>';
+                } else {
+                    groupsList.innerHTML = groups.map(group => {
+                        const isMember = group.members && group.members.some(m => m.bidderId === bidderId);
+                        return `
+                            <div style="background: ${isMember ? 'var(--theme-bgCardAlt)' : 'var(--theme-bgCard)'}; border: 1px solid ${isMember ? 'var(--theme-accent)' : 'var(--theme-border)'};" class="rounded-lg p-6">
+                                <div class="flex justify-between items-start mb-3">
+                                    <div>
+                                        <h4 class="text-theme-text font-semibold font-display">${esc(group.name || group.groupName)}</h4>
+                                        <p class="text-theme-textMuted text-xs">${(group.members || []).length || group.memberCount || 0} members</p>
+                                    </div>
+                                    ${isMember ? '<span style="background-color: var(--theme-accent); color: white;" class="px-2 py-1 text-xs font-medium rounded">Your Group</span>' : ''}
+                                </div>
+                                <p class="text-theme-primary text-2xl font-bold font-display">${formatCurrency(group.totalAmount)}</p>
+                                ${isMember ? `<a href="/group.html?groupId=${esc(group.id)}" style="color: var(--theme-accent);" class="mt-3 inline-block hover:underline font-semibold font-display text-xs">Manage Group →</a>` : ''}
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Failed to load groups:', error);
+            }
+        }
+
+        async function loadItem() {
+            const itemId = getItemId();
+
+            if (!itemId) {
+                window.location.href = '/items.html';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/events/${eventId}/items/${itemId}`);
+                const data = await response.json();
+
+                // FIX: Server returns { item: {...} } wrapper
+                item = data.item || data;
+                currentBid = item.currentBid || item.startingBid || 0;
+
+                document.getElementById('itemTitle').textContent = esc(item.title);
+                document.getElementById('itemName').textContent = esc(item.title);
+                document.getElementById('itemDescription').textContent = esc(item.description);
+                document.getElementById('itemImage').src = esc(item.image || '');
+
+                updateBidDisplay();
+
+                // FIX: Bids array has {bidderName, amount, timestamp}
+                if (item.bids && Array.isArray(item.bids) && item.bids.length > 0) {
+                    const historyDiv = document.getElementById('bidHistory');
+                    historyDiv.innerHTML = '';
+                    item.bids.forEach(bid => {
+                        addBidToHistory(bid.bidderName, bid.amount, bid.timestamp);
+                    });
+                }
+
+                loadGroups();
+            } catch (error) {
+                console.error('Failed to load item:', error);
+                alert('Failed to load item. Please try again.');
+            }
+        }
+
+        function initSocket() {
+            socket = io();
+            const itemId = getItemId();
+
+            socket.on('connect', () => {
+                socket.emit('join-auction', { eventId, bidderId });
+            });
+
+            socket.on('bid:new', (data) => {
+                if (data.itemId === itemId) {
+                    currentBid = data.amount;
+                    if (item) item.currentBid = data.amount;
+                    updateBidDisplay();
+                    if (data.displayName) {
+                        addBidToHistory(data.displayName, data.amount, new Date());
+                    }
+                }
+            });
+
+            socket.on('group:updated', (data) => {
+                if (data.itemId === itemId) {
+                    loadGroups();
+                }
+            });
+        }
+
+        loadItem();
+        initSocket();
+    </script>
+
+    <!-- Bottom Navigation -->
+    <div class="app-nav-bar">
+        <a href="/items.html" class="app-nav-item active">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+            </svg>
+            <span>Items</span>
+        </a>
+        <a href="/mybids.html" class="app-nav-item ">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>My Bids</span>
+        </a>
+        <a href="/groups.html" class="app-nav-item ">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+            <span>Groups</span>
+        </a>
+        <a href="/profile.html" class="app-nav-item ">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+            </svg>
+            <span>Profile</span>
+        </a>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,26 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: bidflow-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bidflow-app
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      PORT: 3000
+      MONGODB_URI: mongodb://mongo:27017/bidflow
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo_data:

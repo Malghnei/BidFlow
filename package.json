@@ -1,12 +1,21 @@
 {
   "name": "bidflow",
-  "private": true,
-  "version": "0.1.0",
-  "workspaces": [
-    "apps/*"
-  ],
+  "version": "1.0.0",
+  "description": "Real-time charity auction bid tracking app",
+  "main": "server.js",
   "scripts": {
-    "dev:backend": "npm run dev -w @bidflow/backend",
-    "build:backend": "npm run build -w @bidflow/backend"
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["auction", "bidding", "charity"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.0",
+    "mongoose": "^8.12.2"
   }
 }

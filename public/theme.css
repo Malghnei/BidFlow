@@ -1,0 +1,193 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&display=swap');
+
+:root {
+  --theme-bg: #FEFCF7;
+  --theme-bgCard: #FFFFFF;
+  --theme-bgCardAlt: #F8F4ED;
+  --theme-primary: #1e3a8a;
+  --theme-primaryLight: #eff6ff;
+  --theme-accent: #B88A3E;
+  --theme-accentLight: #F5ECD8;
+  --theme-text: #1C2B22;
+  --theme-textMuted: #6B7F72;
+  --theme-border: rgba(30,58,138,0.12);
+  --theme-borderAccent: rgba(184,138,62,0.25);
+  --radius-theme: 8px;
+  --radius-themeSm: 4px;
+}
+
+body {
+    background-color: var(--theme-bg);
+    color: var(--theme-text);
+    font-family: 'Nunito Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: 'Lora', serif;
+}
+
+.font-body {
+    font-family: 'Nunito Sans', sans-serif;
+}
+
+.card {
+    background-color: var(--theme-bgCard);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--radius-theme);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+.btn-primary {
+    background-color: var(--theme-primary);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: var(--radius-theme);
+    font-weight: 600;
+    font-family: 'Nunito Sans', sans-serif;
+    cursor: pointer;
+    transition: background-color 0.2s, opacity 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: #172554;
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+input, select, textarea {
+    border: 1px solid var(--theme-border) !important;
+    border-radius: var(--radius-themeSm) !important;
+    background-color: var(--theme-bgCard) !important;
+    color: var(--theme-text) !important;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none !important;
+    border-color: var(--theme-primary) !important;
+    box-shadow: 0 0 0 3px var(--theme-primaryLight) !important;
+}
+
+/* Base Geometric Pattern - Appears faintly in corners or backgrounds */
+.geo-pattern {
+    position: relative;
+}
+
+.geo-pattern::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at top right, rgba(184,138,62,0.05) 0%, transparent 40%),
+                radial-gradient(circle at bottom left, rgba(30,58,138,0.03) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Accent Card Highlight */
+.geo-pattern-card {
+    position: relative;
+}
+.geo-pattern-card::before {
+    content: '';
+    position: absolute;
+    top: -20%;
+    right: -20%;
+    width: 140%;
+    height: 140%;
+    background: radial-gradient(circle, rgba(184,138,62,0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Ensure foreground content stays above the pseudo-element patterns */
+.geo-pattern > *, .geo-pattern-card > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Special styling for Live Display background */
+.bg-live-display {
+    background-color: #0F172A; /* Deep Navy/Slate */
+    background-image: radial-gradient(circle at 50% 0%, rgba(30,58,138,0.4) 0%, transparent 50%),
+                      radial-gradient(circle at 50% 100%, rgba(184,138,62,0.15) 0%, transparent 50%);
+    color: white;
+}
+
+/* App Navigation Bar (Floating Pill) */
+.app-nav-bar {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--theme-border);
+    box-shadow: 0 10px 25px rgba(30, 58, 138, 0.15);
+    border-radius: 9999px;
+    padding: 0.5rem 1.5rem;
+    z-index: 50;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    align-items: center;
+}
+
+.app-nav-item {
+    color: var(--theme-textMuted);
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.app-nav-item svg {
+    width: 24px;
+    height: 24px;
+    stroke-width: 2;
+    transition: all 0.2s ease;
+}
+
+.app-nav-item:hover, .app-nav-item:active {
+    color: var(--theme-primary);
+    transform: translateY(-2px);
+}
+
+.app-nav-item.active {
+    color: var(--theme-accent);
+}
+
+.app-nav-item.active svg {
+    stroke: var(--theme-accent);
+    fill: rgba(59, 130, 246, 0.1);
+}
+
+/* Widen Navbar on Desktop */
+@media (min-width: 768px) {
+    .app-nav-bar {
+        width: 100%;
+        max-width: 36rem; /* 576px */
+        gap: 3.5rem;
+        padding: 0.75rem 2.5rem;
+    }
+    
+    .app-nav-item {
+        font-size: 0.875rem;
+    }
+    
+    .app-nav-item svg {
+        width: 28px;
+        height: 28px;
+    }
+}
