@@ -14,4 +14,7 @@ export default defineConfig({
       '/img': 'http://localhost:3000',
     },
   },
+  build: {
+    outDir: 'build',
+  },
 })
